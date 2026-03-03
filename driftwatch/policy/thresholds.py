@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -117,10 +116,7 @@ def evaluate_policies(
             violation = PolicyViolation(
                 rule=rule,
                 actual_value=value,
-                message=(
-                    f"Policy violated: {rule.metric} {rule.operator.value} "
-                    f"{rule.threshold} — actual {value}"
-                ),
+                message=(f"Policy violated: {rule.metric} {rule.operator.value} {rule.threshold} — actual {value}"),
             )
             if rule.action == Action.BLOCK:
                 violations.append(violation)

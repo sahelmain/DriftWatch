@@ -5,17 +5,19 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-
 pytestmark = pytest.mark.asyncio
 
 
 class TestAuth:
     async def test_register_returns_token_and_user(self, client: AsyncClient):
-        res = await client.post("/api/auth/register", json={
-            "email": "new@test.io",
-            "password": "pass1234",
-            "org_name": "My Org",
-        })
+        res = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "new@test.io",
+                "password": "pass1234",
+                "org_name": "My Org",
+            },
+        )
         assert res.status_code == 201
         body = res.json()
         assert "access_token" in body
@@ -24,20 +26,26 @@ class TestAuth:
         assert body["user"]["role"] == "admin"
 
     async def test_login_returns_token_and_user(self, auth_client: AsyncClient):
-        res = await auth_client.post("/api/auth/login", json={
-            "email": "admin@test.io",
-            "password": "testpass123",
-        })
+        res = await auth_client.post(
+            "/api/auth/login",
+            json={
+                "email": "admin@test.io",
+                "password": "testpass123",
+            },
+        )
         assert res.status_code == 200
         body = res.json()
         assert "access_token" in body
         assert body["user"]["email"] == "admin@test.io"
 
     async def test_login_invalid_creds(self, client: AsyncClient):
-        res = await client.post("/api/auth/login", json={
-            "email": "nobody@test.io",
-            "password": "wrong",
-        })
+        res = await client.post(
+            "/api/auth/login",
+            json={
+                "email": "nobody@test.io",
+                "password": "wrong",
+            },
+        )
         assert res.status_code == 401
 
 
@@ -53,11 +61,14 @@ class TestSuites:
         assert isinstance(body["items"], list)
 
     async def test_create_and_get_suite(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/suites", json={
-            "name": "Test Suite",
-            "description": "A test suite",
-            "yaml_content": "tests: []",
-        })
+        create_res = await auth_client.post(
+            "/api/suites",
+            json={
+                "name": "Test Suite",
+                "description": "A test suite",
+                "yaml_content": "tests: []",
+            },
+        )
         assert create_res.status_code == 201
         suite = create_res.json()
         assert suite["name"] == "Test Suite"
@@ -128,13 +139,16 @@ class TestAlerts:
         assert res.json() == []
 
     async def test_create_alert(self, auth_client: AsyncClient):
-        res = await auth_client.post("/api/alerts", json={
-            "channel": "slack",
-            "destination": "https://hooks.slack.com/test",
-            "threshold_metric": "pass_rate",
-            "threshold_value": 0.8,
-            "enabled": True,
-        })
+        res = await auth_client.post(
+            "/api/alerts",
+            json={
+                "channel": "slack",
+                "destination": "https://hooks.slack.com/test",
+                "threshold_metric": "pass_rate",
+                "threshold_value": 0.8,
+                "enabled": True,
+            },
+        )
         assert res.status_code == 201
         alert = res.json()
         assert alert["channel"] == "slack"
@@ -142,27 +156,36 @@ class TestAlerts:
         assert alert["threshold_value"] == 0.8
 
     async def test_update_alert(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/alerts", json={
-            "channel": "email",
-            "destination": "team@test.io",
-            "threshold_metric": "pass_rate",
-            "threshold_value": 0.9,
-        })
+        create_res = await auth_client.post(
+            "/api/alerts",
+            json={
+                "channel": "email",
+                "destination": "team@test.io",
+                "threshold_metric": "pass_rate",
+                "threshold_value": 0.9,
+            },
+        )
         alert_id = create_res.json()["id"]
 
-        update_res = await auth_client.put(f"/api/alerts/{alert_id}", json={
-            "threshold_value": 0.7,
-        })
+        update_res = await auth_client.put(
+            f"/api/alerts/{alert_id}",
+            json={
+                "threshold_value": 0.7,
+            },
+        )
         assert update_res.status_code == 200
         assert update_res.json()["threshold_value"] == 0.7
 
     async def test_delete_alert(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/alerts", json={
-            "channel": "slack",
-            "destination": "https://hooks.slack.com/del",
-            "threshold_metric": "pass_rate",
-            "threshold_value": 0.5,
-        })
+        create_res = await auth_client.post(
+            "/api/alerts",
+            json={
+                "channel": "slack",
+                "destination": "https://hooks.slack.com/del",
+                "threshold_metric": "pass_rate",
+                "threshold_value": 0.5,
+            },
+        )
         alert_id = create_res.json()["id"]
 
         del_res = await auth_client.delete(f"/api/alerts/{alert_id}")
@@ -176,23 +199,29 @@ class TestPolicies:
         assert res.json() == []
 
     async def test_create_policy(self, auth_client: AsyncClient):
-        res = await auth_client.post("/api/policies", json={
-            "name": "Block Low Pass Rate",
-            "metric": "pass_rate",
-            "operator": "lt",
-            "threshold": 0.8,
-            "action": "block",
-        })
+        res = await auth_client.post(
+            "/api/policies",
+            json={
+                "name": "Block Low Pass Rate",
+                "metric": "pass_rate",
+                "operator": "lt",
+                "threshold": 0.8,
+                "action": "block",
+            },
+        )
         assert res.status_code == 201
         assert res.json()["name"] == "Block Low Pass Rate"
 
     async def test_delete_policy(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/policies", json={
-            "name": "To Delete",
-            "metric": "pass_rate",
-            "operator": "lt",
-            "threshold": 0.5,
-        })
+        create_res = await auth_client.post(
+            "/api/policies",
+            json={
+                "name": "To Delete",
+                "metric": "pass_rate",
+                "operator": "lt",
+                "threshold": 0.5,
+            },
+        )
         policy_id = create_res.json()["id"]
 
         del_res = await auth_client.delete(f"/api/policies/{policy_id}")
@@ -215,20 +244,26 @@ class TestSettings:
         assert "plan_limit" in body["usage"]
 
     async def test_create_api_key(self, auth_client: AsyncClient):
-        res = await auth_client.post("/api/settings/api-keys", json={
-            "name": "CI Key",
-        })
+        res = await auth_client.post(
+            "/api/settings/api-keys",
+            json={
+                "name": "CI Key",
+            },
+        )
         assert res.status_code == 201
         body = res.json()
         assert "raw_key" in body
         assert body["name"] == "CI Key"
 
     async def test_add_member(self, auth_client: AsyncClient):
-        res = await auth_client.post("/api/settings/members", json={
-            "email": "member@test.io",
-            "password": "pass1234",
-            "role": "member",
-        })
+        res = await auth_client.post(
+            "/api/settings/members",
+            json={
+                "email": "member@test.io",
+                "password": "pass1234",
+                "role": "member",
+            },
+        )
         assert res.status_code == 201
         assert res.json()["email"] == "member@test.io"
 
@@ -247,19 +282,26 @@ class TestSmokeE2E:
     """Full workflow: register -> create suite -> trigger run -> verify run list."""
 
     async def test_full_flow(self, client: AsyncClient):
-        reg = await client.post("/api/auth/register", json={
-            "email": "e2e@test.io",
-            "password": "e2epass123",
-            "org_name": "E2E Org",
-        })
+        reg = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "e2e@test.io",
+                "password": "e2epass123",
+                "org_name": "E2E Org",
+            },
+        )
         assert reg.status_code == 201
         token = reg.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        suite = await client.post("/api/suites", json={
-            "name": "E2E Suite",
-            "yaml_content": "tests:\n  - name: t1\n    prompt: hello\n",
-        }, headers=headers)
+        suite = await client.post(
+            "/api/suites",
+            json={
+                "name": "E2E Suite",
+                "yaml_content": "tests:\n  - name: t1\n    prompt: hello\n",
+            },
+            headers=headers,
+        )
         assert suite.status_code == 201
         suite_id = suite.json()["id"]
 

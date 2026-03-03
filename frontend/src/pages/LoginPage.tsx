@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, Mail, Lock, Building2, Loader2 } from "lucide-react";
 import { login, register, ApiError } from "@/api";
-import { useAuth } from "@/App";
+import { useAuth } from "@/AuthContext";
 
 const AUTO_LOGIN_KEY = "dw_demo_auto_login_started_v2";
 const DEMO_AUTO_LOGIN_ENABLED =

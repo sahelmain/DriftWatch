@@ -12,7 +12,6 @@ from app.models import (
     DriftScore,
     TestResult,
     TestRun,
-    TestSuite,
 )
 
 
@@ -75,12 +74,16 @@ class RunService:
 
     async def compute_drift(self, suite_id: uuid.UUID) -> list[DriftScore]:
         runs = (
-            await self.db.execute(
-                select(TestRun)
-                .where(TestRun.suite_id == suite_id, TestRun.status == "completed")
-                .order_by(TestRun.completed_at.asc())
+            (
+                await self.db.execute(
+                    select(TestRun)
+                    .where(TestRun.suite_id == suite_id, TestRun.status == "completed")
+                    .order_by(TestRun.completed_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         scores: list[DriftScore] = []
         for run in runs:
@@ -100,9 +103,7 @@ class RunService:
 
     async def get_drift_timeline(self, suite_id: uuid.UUID) -> list[DriftScore]:
         result = await self.db.execute(
-            select(DriftScore)
-            .where(DriftScore.suite_id == suite_id)
-            .order_by(DriftScore.timestamp.asc())
+            select(DriftScore).where(DriftScore.suite_id == suite_id).order_by(DriftScore.timestamp.asc())
         )
         return list(result.scalars().all())
 
@@ -159,6 +160,7 @@ class RunService:
     def _dispatch_to_worker(run_id: uuid.UUID) -> None:
         try:
             from worker.runner import execute_run
+
             execute_run.delay(str(run_id))
         except Exception:
             pass

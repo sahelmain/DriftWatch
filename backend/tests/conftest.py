@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import Any
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.database import Base, get_db
 from app.main import app
-
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 _TEST_DB_URL = "sqlite+aiosqlite://"
 
@@ -35,6 +32,7 @@ def event_loop():
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
     import app.models  # noqa: F401
+
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -65,11 +63,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 @pytest_asyncio.fixture
 async def auth_client(client: AsyncClient) -> AsyncClient:
     """Register a user and return a client with auth headers."""
-    res = await client.post("/api/auth/register", json={
-        "email": "admin@test.io",
-        "password": "testpass123",
-        "org_name": "Test Org",
-    })
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "admin@test.io",
+            "password": "testpass123",
+            "org_name": "Test Org",
+        },
+    )
     assert res.status_code == 201
     token = res.json()["access_token"]
     client.headers["Authorization"] = f"Bearer {token}"

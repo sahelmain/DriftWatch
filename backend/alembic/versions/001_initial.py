@@ -4,10 +4,11 @@ Revision ID: 001
 Revises:
 Create Date: 2026-03-02
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "001"
@@ -33,7 +34,12 @@ def upgrade() -> None:
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("password_hash", sa.String(255), nullable=False),
         sa.Column("role", sa.String(50), nullable=False, server_default="member"),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("is_active", sa.Boolean, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -47,7 +53,12 @@ def upgrade() -> None:
         sa.Column("key_hash", sa.String(255), nullable=False),
         sa.Column("key_prefix", sa.String(8), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("scopes", postgresql.JSON, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
@@ -62,7 +73,12 @@ def upgrade() -> None:
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("yaml_content", sa.Text, nullable=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("schedule_cron", sa.String(100), nullable=True),
         sa.Column("is_active", sa.Boolean, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -73,7 +89,12 @@ def upgrade() -> None:
     op.create_table(
         "test_runs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("suite_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_suites.id"), nullable=False),
+        sa.Column(
+            "suite_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_suites.id"),
+            nullable=False,
+        ),
         sa.Column("status", sa.String(50), nullable=False, server_default="pending"),
         sa.Column("trigger", sa.String(50), nullable=False, server_default="manual"),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
@@ -82,7 +103,12 @@ def upgrade() -> None:
         sa.Column("total_tests", sa.Integer, nullable=True),
         sa.Column("passed_tests", sa.Integer, nullable=True),
         sa.Column("metadata", postgresql.JSON, nullable=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
     )
     op.create_index("ix_test_runs_suite_id", "test_runs", ["suite_id"])
     op.create_index("ix_test_runs_org_id", "test_runs", ["org_id"])
@@ -106,7 +132,12 @@ def upgrade() -> None:
     op.create_table(
         "assertion_results",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("result_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_results.id"), nullable=False),
+        sa.Column(
+            "result_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_results.id"),
+            nullable=False,
+        ),
         sa.Column("assertion_type", sa.String(100), nullable=False),
         sa.Column("passed", sa.Boolean, nullable=False, server_default=sa.text("false")),
         sa.Column("expected", postgresql.JSON, nullable=True),
@@ -119,7 +150,12 @@ def upgrade() -> None:
     op.create_table(
         "drift_scores",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("suite_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_suites.id"), nullable=False),
+        sa.Column(
+            "suite_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_suites.id"),
+            nullable=False,
+        ),
         sa.Column("run_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_runs.id"), nullable=False),
         sa.Column("metric", sa.String(100), nullable=False),
         sa.Column("value", sa.Float, nullable=False),
@@ -131,8 +167,18 @@ def upgrade() -> None:
     op.create_table(
         "alert_configs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("suite_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_suites.id"), nullable=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "suite_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_suites.id"),
+            nullable=True,
+        ),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("channel", sa.String(50), nullable=False),
         sa.Column("destination", sa.String(500), nullable=False),
         sa.Column("threshold_metric", sa.String(100), nullable=False),
@@ -145,7 +191,12 @@ def upgrade() -> None:
     op.create_table(
         "alert_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("alert_config_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("alert_configs.id"), nullable=False),
+        sa.Column(
+            "alert_config_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("alert_configs.id"),
+            nullable=False,
+        ),
         sa.Column("run_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_runs.id"), nullable=False),
         sa.Column("channel", sa.String(50), nullable=False),
         sa.Column("message", sa.Text, nullable=False),
@@ -158,7 +209,12 @@ def upgrade() -> None:
     op.create_table(
         "audit_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("action", sa.String(100), nullable=False),
         sa.Column("resource_type", sa.String(100), nullable=False),
@@ -173,8 +229,18 @@ def upgrade() -> None:
     op.create_table(
         "policies",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
-        sa.Column("suite_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_suites.id"), nullable=True),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "suite_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_suites.id"),
+            nullable=True,
+        ),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("metric", sa.String(100), nullable=False),
         sa.Column("operator", sa.String(10), nullable=False),
@@ -188,7 +254,12 @@ def upgrade() -> None:
     op.create_table(
         "datasets",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("org_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column(
+            "org_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("organizations.id"),
+            nullable=False,
+        ),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("version", sa.Integer, nullable=False, server_default=sa.text("1")),
         sa.Column("description", sa.Text, nullable=True),
@@ -201,7 +272,12 @@ def upgrade() -> None:
     op.create_table(
         "prompt_versions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("suite_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("test_suites.id"), nullable=False),
+        sa.Column(
+            "suite_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("test_suites.id"),
+            nullable=False,
+        ),
         sa.Column("version", sa.Integer, nullable=False),
         sa.Column("yaml_content", sa.Text, nullable=False),
         sa.Column("change_message", sa.Text, nullable=True),

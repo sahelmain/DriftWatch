@@ -19,6 +19,7 @@ async def _trigger_suite_run(suite_id: str) -> None:
     """Run a suite — dispatches to Celery if available, else runs in-process."""
     try:
         from worker.runner import execute_run
+
         execute_run.delay(suite_id)
         logger.info("Dispatched scheduled run for suite %s via Celery", suite_id)
         return
@@ -26,6 +27,7 @@ async def _trigger_suite_run(suite_id: str) -> None:
         pass
 
     from app.services.runs import RunService
+
     async with async_session() as db:
         svc = RunService(db)
         suite = (await db.execute(select(TestSuite).where(TestSuite.id == uuid.UUID(suite_id)))).scalar_one_or_none()

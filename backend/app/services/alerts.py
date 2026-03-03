@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 
 import httpx
 from sqlalchemy import select
@@ -23,14 +22,18 @@ class AlertService:
 
     async def check_and_alert(self, run: TestRun) -> list[AlertEvent]:
         configs = (
-            await self.db.execute(
-                select(AlertConfig).where(
-                    AlertConfig.org_id == run.org_id,
-                    AlertConfig.enabled.is_(True),
-                    (AlertConfig.suite_id == run.suite_id) | (AlertConfig.suite_id.is_(None)),
+            (
+                await self.db.execute(
+                    select(AlertConfig).where(
+                        AlertConfig.org_id == run.org_id,
+                        AlertConfig.enabled.is_(True),
+                        (AlertConfig.suite_id == run.suite_id) | (AlertConfig.suite_id.is_(None)),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         events: list[AlertEvent] = []
         for cfg in configs:
@@ -90,7 +93,7 @@ class AlertService:
             except Exception:
                 logger.exception("Alert dispatch attempt %d/%d failed (%s)", attempt, MAX_RETRIES, channel)
                 if attempt < MAX_RETRIES:
-                    await asyncio.sleep(RETRY_BACKOFF ** attempt)
+                    await asyncio.sleep(RETRY_BACKOFF**attempt)
         return False
 
     @staticmethod
@@ -101,8 +104,9 @@ class AlertService:
 
     @staticmethod
     async def send_email(to: str, subject_and_body: str) -> None:
-        import aiosmtplib
         from email.message import EmailMessage
+
+        import aiosmtplib
 
         msg = EmailMessage()
         msg["From"] = settings.SMTP_FROM

@@ -4,7 +4,7 @@ import math
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prometheus_client import generate_latest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +39,6 @@ from app.schemas import (
     MemberAdd,
     OrgCreate,
     OrgResponse,
-    OrgSettings,
     OrgSettingsApiKey,
     OrgSettingsMember,
     OrgSettingsOrg,
@@ -60,7 +59,6 @@ from app.schemas import (
     UserResponse,
     WebhookTestRequest,
 )
-
 from app.services.alerts import AlertService
 from app.services.auth import (
     create_access_token,
@@ -89,6 +87,7 @@ def _paginate(items: list, total: int, page: int, limit: int) -> PaginatedRespon
 # --------------------------------------------------------------------------- #
 # Auth
 # --------------------------------------------------------------------------- #
+
 
 @router.post("/auth/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -137,6 +136,7 @@ async def me(user: User = Depends(get_current_user)):
 # Orgs
 # --------------------------------------------------------------------------- #
 
+
 @router.post("/orgs", response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
 async def create_org(body: OrgCreate, user: User = Depends(require_role("admin")), db: AsyncSession = Depends(get_db)):
     org = Organization(name=body.name, slug=body.slug, plan=body.plan)
@@ -178,6 +178,7 @@ async def list_api_keys(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import ApiKey
+
     rows = (await db.execute(select(ApiKey).where(ApiKey.org_id == org_id))).scalars().all()
     return rows
 
@@ -211,6 +212,7 @@ async def revoke_api_key(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import ApiKey
+
     key = (await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == org_id))).scalar_one_or_none()
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -220,6 +222,7 @@ async def revoke_api_key(
 # --------------------------------------------------------------------------- #
 # Suites
 # --------------------------------------------------------------------------- #
+
 
 @router.get("/suites", response_model=PaginatedResponse)
 async def list_suites(
@@ -231,8 +234,10 @@ async def list_suites(
     base = select(TestSuite).where(TestSuite.org_id == user.org_id, TestSuite.is_active.is_(True))
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
     rows = (
-        await db.execute(base.order_by(TestSuite.created_at.desc()).offset((page - 1) * limit).limit(limit))
-    ).scalars().all()
+        (await db.execute(base.order_by(TestSuite.created_at.desc()).offset((page - 1) * limit).limit(limit)))
+        .scalars()
+        .all()
+    )
     items = [TestSuiteResponse.model_validate(r) for r in rows]
     return _paginate(items, total, page, limit)
 
@@ -297,6 +302,7 @@ async def delete_suite(suite_id: uuid.UUID, user: User = Depends(get_current_use
 # Runs
 # --------------------------------------------------------------------------- #
 
+
 @router.post("/suites/{suite_id}/run", response_model=TestRunResponse, status_code=status.HTTP_201_CREATED)
 async def trigger_run(
     suite_id: uuid.UUID,
@@ -346,16 +352,19 @@ async def get_drift(suite_id: uuid.UUID, user: User = Depends(get_current_user),
 # Alerts
 # --------------------------------------------------------------------------- #
 
+
 @router.get("/alerts", response_model=list[AlertConfigResponse])
 async def list_alerts(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    rows = (
-        await db.execute(select(AlertConfig).where(AlertConfig.org_id == user.org_id))
-    ).scalars().all()
+    rows = (await db.execute(select(AlertConfig).where(AlertConfig.org_id == user.org_id))).scalars().all()
     return rows
 
 
 @router.post("/alerts", response_model=AlertConfigResponse, status_code=status.HTTP_201_CREATED)
-async def create_alert(body: AlertConfigCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def create_alert(
+    body: AlertConfigCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     cfg = AlertConfig(
         suite_id=body.suite_id,
         org_id=user.org_id,
@@ -395,7 +404,11 @@ async def delete_alert(alert_id: uuid.UUID, user: User = Depends(get_current_use
 
 
 @router.post("/webhooks/test", status_code=status.HTTP_200_OK)
-async def test_webhook(body: WebhookTestRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def test_webhook(
+    body: WebhookTestRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     svc = AlertService(db)
     dispatch_map = {
         "slack": lambda: svc.send_slack(body.destination, "DriftWatch test alert"),
@@ -416,6 +429,7 @@ async def test_webhook(body: WebhookTestRequest, user: User = Depends(get_curren
 # --------------------------------------------------------------------------- #
 # Policies
 # --------------------------------------------------------------------------- #
+
 
 @router.get("/policies", response_model=list[PolicyResponse])
 async def list_policies(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -457,7 +471,9 @@ async def update_policy(
 
 
 @router.delete("/policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_policy(policy_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def delete_policy(
+    policy_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
     p = (await db.execute(select(Policy).where(Policy.id == policy_id))).scalar_one_or_none()
     if p is None:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -468,6 +484,7 @@ async def delete_policy(policy_id: uuid.UUID, user: User = Depends(get_current_u
 # Datasets
 # --------------------------------------------------------------------------- #
 
+
 @router.get("/datasets", response_model=list[DatasetResponse])
 async def list_datasets(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(select(Dataset).where(Dataset.org_id == user.org_id))).scalars().all()
@@ -475,7 +492,9 @@ async def list_datasets(user: User = Depends(get_current_user), db: AsyncSession
 
 
 @router.post("/datasets", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
-async def create_dataset(body: DatasetCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def create_dataset(
+    body: DatasetCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
     ds = Dataset(
         org_id=user.org_id,
         name=body.name,
@@ -489,7 +508,11 @@ async def create_dataset(body: DatasetCreate, user: User = Depends(get_current_u
 
 
 @router.get("/datasets/{dataset_id}", response_model=DatasetDetail)
-async def get_dataset(dataset_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_dataset(
+    dataset_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     ds = (await db.execute(select(Dataset).where(Dataset.id == dataset_id))).scalar_one_or_none()
     if ds is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -499,6 +522,7 @@ async def get_dataset(dataset_id: uuid.UUID, user: User = Depends(get_current_us
 # --------------------------------------------------------------------------- #
 # CI Check
 # --------------------------------------------------------------------------- #
+
 
 @router.post("/ci/check", response_model=CICheckResponse)
 async def ci_check(body: CICheckRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -520,14 +544,18 @@ async def ci_check(body: CICheckRequest, user: User = Depends(get_current_user),
         )
 
     policies = (
-        await db.execute(
-            select(Policy).where(
-                Policy.enabled.is_(True),
-                (Policy.suite_id == body.suite_id) | (Policy.suite_id.is_(None)),
-                Policy.org_id == user.org_id,
+        (
+            await db.execute(
+                select(Policy).where(
+                    Policy.enabled.is_(True),
+                    (Policy.suite_id == body.suite_id) | (Policy.suite_id.is_(None)),
+                    Policy.org_id == user.org_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     passed = True
     messages: list[str] = []
@@ -537,9 +565,14 @@ async def ci_check(body: CICheckRequest, user: User = Depends(get_current_user),
         metric_val = latest_run.pass_rate if policy.metric == "pass_rate" else None
         if metric_val is None:
             continue
-        ops = {"lt": metric_val < policy.threshold, "le": metric_val <= policy.threshold,
-               "gt": metric_val > policy.threshold, "ge": metric_val >= policy.threshold,
-               "eq": metric_val == policy.threshold, "ne": metric_val != policy.threshold}
+        ops = {
+            "lt": metric_val < policy.threshold,
+            "le": metric_val <= policy.threshold,
+            "gt": metric_val > policy.threshold,
+            "ge": metric_val >= policy.threshold,
+            "eq": metric_val == policy.threshold,
+            "ne": metric_val != policy.threshold,
+        }
         if ops.get(policy.operator, False):
             passed = False
             messages.append(f"Policy '{policy.name}' violated: {policy.metric} {policy.operator} {policy.threshold}")
@@ -558,6 +591,7 @@ async def ci_check(body: CICheckRequest, user: User = Depends(get_current_user),
 # Audit Log
 # --------------------------------------------------------------------------- #
 
+
 @router.get("/audit-log", response_model=PaginatedResponse)
 async def list_audit_log(
     page: int = Query(1, ge=1),
@@ -568,8 +602,10 @@ async def list_audit_log(
     base = select(AuditLog).where(AuditLog.org_id == user.org_id)
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
     rows = (
-        await db.execute(base.order_by(AuditLog.timestamp.desc()).offset((page - 1) * limit).limit(limit))
-    ).scalars().all()
+        (await db.execute(base.order_by(AuditLog.timestamp.desc()).offset((page - 1) * limit).limit(limit)))
+        .scalars()
+        .all()
+    )
     items = [AuditLogResponse.model_validate(r) for r in rows]
     return _paginate(items, total, page, limit)
 
@@ -577,6 +613,7 @@ async def list_audit_log(
 # --------------------------------------------------------------------------- #
 # Metrics (Prometheus)
 # --------------------------------------------------------------------------- #
+
 
 @router.get("/metrics")
 async def prometheus_metrics():
@@ -587,49 +624,61 @@ async def prometheus_metrics():
 # Settings
 # --------------------------------------------------------------------------- #
 
+
 async def _build_settings_response(org: Organization, db: AsyncSession) -> OrgSettingsResponse:
-    from app.models import ApiKey as ApiKeyModel
     from datetime import datetime, timezone
-    import calendar
+
+    from app.models import ApiKey as ApiKeyModel
 
     members_rows = (await db.execute(select(User).where(User.org_id == org.id))).scalars().all()
     keys_rows = (await db.execute(select(ApiKeyModel).where(ApiKeyModel.org_id == org.id))).scalars().all()
 
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    runs_count = (await db.execute(
-        select(func.count()).select_from(
-            select(TestRun).where(
-                TestRun.org_id == org.id,
-                TestRun.started_at >= month_start,
-            ).subquery()
+    runs_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(TestRun)
+                .where(
+                    TestRun.org_id == org.id,
+                    TestRun.started_at >= month_start,
+                )
+                .subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
-    suites_count = (await db.execute(
-        select(func.count()).select_from(
-            select(TestSuite).where(
-                TestSuite.org_id == org.id,
-                TestSuite.is_active.is_(True),
-            ).subquery()
+    suites_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(TestSuite)
+                .where(
+                    TestSuite.org_id == org.id,
+                    TestSuite.is_active.is_(True),
+                )
+                .subquery()
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     plan_limits = {"free": 1000, "pro": 10000, "enterprise": 100000}
 
     return OrgSettingsResponse(
         org=OrgSettingsOrg(
-            id=org.id, name=org.name, slug=org.slug,
-            plan=org.plan, created_at=org.created_at,
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            plan=org.plan,
+            created_at=org.created_at,
         ),
-        members=[
-            OrgSettingsMember(id=m.id, email=m.email, role=m.role, created_at=m.created_at)
-            for m in members_rows
-        ],
+        members=[OrgSettingsMember(id=m.id, email=m.email, role=m.role, created_at=m.created_at) for m in members_rows],
         api_keys=[
             OrgSettingsApiKey(
-                id=k.id, prefix=k.key_prefix, name=k.name,
-                created_at=k.created_at, last_used_at=k.last_used_at,
+                id=k.id,
+                prefix=k.key_prefix,
+                name=k.name,
+                created_at=k.created_at,
+                last_used_at=k.last_used_at,
             )
             for k in keys_rows
         ],
@@ -675,9 +724,15 @@ async def settings_create_api_key(
 ):
     api_key, raw_key = await create_api_key(db, user.org_id, body.name, body.scopes, body.expires_at)
     return ApiKeyCreated(
-        id=api_key.id, key_prefix=api_key.key_prefix, name=api_key.name,
-        org_id=api_key.org_id, scopes=api_key.scopes, created_at=api_key.created_at,
-        expires_at=api_key.expires_at, last_used_at=api_key.last_used_at, raw_key=raw_key,
+        id=api_key.id,
+        key_prefix=api_key.key_prefix,
+        name=api_key.name,
+        org_id=api_key.org_id,
+        scopes=api_key.scopes,
+        created_at=api_key.created_at,
+        expires_at=api_key.expires_at,
+        last_used_at=api_key.last_used_at,
+        raw_key=raw_key,
     )
 
 
@@ -688,7 +743,10 @@ async def settings_revoke_api_key(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import ApiKey as ApiKeyModel
-    key = (await db.execute(select(ApiKeyModel).where(ApiKeyModel.id == key_id, ApiKeyModel.org_id == user.org_id))).scalar_one_or_none()
+
+    key = (
+        await db.execute(select(ApiKeyModel).where(ApiKeyModel.id == key_id, ApiKeyModel.org_id == user.org_id))
+    ).scalar_one_or_none()
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found")
     await db.delete(key)

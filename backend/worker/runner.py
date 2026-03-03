@@ -5,9 +5,8 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from celery import Celery
-
 from app.config import settings
+from celery import Celery
 
 logger = logging.getLogger("driftwatch.worker")
 
@@ -59,9 +58,7 @@ async def _execute_run_async(run_id: str) -> dict:
     from sqlalchemy import select
 
     async with async_session() as db:
-        run = (await db.execute(
-            select(TestRun).where(TestRun.id == uuid.UUID(run_id))
-        )).scalar_one_or_none()
+        run = (await db.execute(select(TestRun).where(TestRun.id == uuid.UUID(run_id)))).scalar_one_or_none()
 
         if run is None:
             logger.error("Run %s not found", run_id)
@@ -75,9 +72,7 @@ async def _execute_run_async(run_id: str) -> dict:
         run.started_at = datetime.now(UTC)
         await db.flush()
 
-        suite = (await db.execute(
-            select(TestSuite).where(TestSuite.id == run.suite_id)
-        )).scalar_one_or_none()
+        suite = (await db.execute(select(TestSuite).where(TestSuite.id == run.suite_id))).scalar_one_or_none()
 
         if suite is None:
             run.status = "failed"
@@ -130,26 +125,28 @@ def _evaluate_suite(suite) -> list[dict]:
         return tests
 
     for tc in spec.get("tests", []):
-        tests.append({
-            "test_name": tc.get("name", "unnamed"),
-            "prompt": tc.get("prompt", ""),
-            "model": tc.get("model", "gpt-4"),
-            "output": "[placeholder output]",
-            "passed": True,
-            "latency_ms": 0.0,
-            "token_count": 0,
-            "cost": 0.0,
-            "assertions": [
-                {
-                    "assertion_type": a.get("type", "contains"),
-                    "passed": True,
-                    "expected": a.get("expected"),
-                    "actual": None,
-                    "score": 1.0,
-                    "message": "Placeholder assertion",
-                }
-                for a in tc.get("assertions", [])
-            ],
-        })
+        tests.append(
+            {
+                "test_name": tc.get("name", "unnamed"),
+                "prompt": tc.get("prompt", ""),
+                "model": tc.get("model", "gpt-4"),
+                "output": "[placeholder output]",
+                "passed": True,
+                "latency_ms": 0.0,
+                "token_count": 0,
+                "cost": 0.0,
+                "assertions": [
+                    {
+                        "assertion_type": a.get("type", "contains"),
+                        "passed": True,
+                        "expected": a.get("expected"),
+                        "actual": None,
+                        "score": 1.0,
+                        "message": "Placeholder assertion",
+                    }
+                    for a in tc.get("assertions", [])
+                ],
+            }
+        )
 
     return tests

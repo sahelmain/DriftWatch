@@ -18,8 +18,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting DriftWatch API")
 
     if settings.AUTO_CREATE_SCHEMA:
-        from app.database import create_tables
         import app.models  # noqa: F401 — ensure models registered
+        from app.database import create_tables
 
         await create_tables()
         logger.info("Schema auto-create enabled")
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
     if settings.ENABLE_INLINE_SCHEDULER:
         try:
-            from app.scheduler import scheduler, load_scheduled_suites
+            from app.scheduler import load_scheduled_suites, scheduler
 
             await load_scheduled_suites()
             scheduler.start()
@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
         logger.warning("OpenTelemetry instrumentation unavailable", exc_info=True)
 
     from app.api.routes import router
+
     app.include_router(router)
 
     @app.get("/api/health")
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
         checks: dict[str, str] = {}
         try:
             from app.database import engine
+
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             checks["database"] = "ok"
@@ -94,6 +96,7 @@ def create_app() -> FastAPI:
 
         try:
             import redis.asyncio as aioredis
+
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             await r.ping()
             await r.aclose()

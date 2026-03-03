@@ -8,8 +8,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
-
 
 @dataclass
 class ProviderResponse:
@@ -125,9 +123,7 @@ class AnthropicProvider(LLMProvider):
         try:
             from anthropic import AsyncAnthropic
         except ImportError as exc:
-            raise ImportError(
-                "Install the 'anthropic' package to use AnthropicProvider."
-            ) from exc
+            raise ImportError("Install the 'anthropic' package to use AnthropicProvider.") from exc
 
         kwargs: dict[str, Any] = {}
         if api_key:

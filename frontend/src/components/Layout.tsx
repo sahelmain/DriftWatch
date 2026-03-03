@@ -10,6 +10,7 @@ import {
   Activity,
 } from "lucide-react";
 import clsx from "clsx";
+import { useAuth } from "@/AuthContext";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -24,11 +25,10 @@ const navItems = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   function handleLogout() {
-    localStorage.removeItem("dw_token");
-    localStorage.removeItem("dw_user");
-    sessionStorage.removeItem("dw_demo_auto_login_started_v2");
+    logout();
     navigate("/login");
   }
 

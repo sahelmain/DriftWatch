@@ -65,11 +65,7 @@ class ContainsAssertion(BaseAssertion):
 
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         check_output = output.lower() if self.case_insensitive else output
-        missing = [
-            s
-            for s in self.substrings
-            if (s.lower() if self.case_insensitive else s) not in check_output
-        ]
+        missing = [s for s in self.substrings if (s.lower() if self.case_insensitive else s) not in check_output]
         passed = len(missing) == 0
         return AssertionResult(
             passed=passed,
@@ -86,11 +82,7 @@ class NotContainsAssertion(BaseAssertion):
 
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         check_output = output.lower() if self.case_insensitive else output
-        found = [
-            s
-            for s in self.substrings
-            if (s.lower() if self.case_insensitive else s) in check_output
-        ]
+        found = [s for s in self.substrings if (s.lower() if self.case_insensitive else s) in check_output]
         passed = len(found) == 0
         return AssertionResult(
             passed=passed,
@@ -225,9 +217,7 @@ class LLMJudgeAssertion(BaseAssertion):
         )
 
         try:
-            response = asyncio.get_event_loop().run_until_complete(
-                provider.complete(prompt, self.judge_model)
-            )
+            response = asyncio.get_event_loop().run_until_complete(provider.complete(prompt, self.judge_model))
             result_data = json.loads(response.text)
             passed = bool(result_data.get("pass", False))
             score = float(result_data.get("score", 0.0))
@@ -289,13 +279,33 @@ class CustomAssertion(BaseAssertion):
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         local_ns: dict[str, Any] = {"output": output, **(context or {})}
         _safe_builtins = {
-            "len": len, "int": int, "float": float, "str": str,
-            "bool": bool, "list": list, "dict": dict, "set": set,
-            "tuple": tuple, "abs": abs, "min": min, "max": max,
-            "sum": sum, "round": round, "sorted": sorted,
-            "isinstance": isinstance, "type": type, "range": range,
-            "enumerate": enumerate, "zip": zip, "map": map, "filter": filter,
-            "any": any, "all": all, "True": True, "False": False, "None": None,
+            "len": len,
+            "int": int,
+            "float": float,
+            "str": str,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
+            "set": set,
+            "tuple": tuple,
+            "abs": abs,
+            "min": min,
+            "max": max,
+            "sum": sum,
+            "round": round,
+            "sorted": sorted,
+            "isinstance": isinstance,
+            "type": type,
+            "range": range,
+            "enumerate": enumerate,
+            "zip": zip,
+            "map": map,
+            "filter": filter,
+            "any": any,
+            "all": all,
+            "True": True,
+            "False": False,
+            "None": None,
         }
         try:
             result = eval(self.expression, {"__builtins__": _safe_builtins}, local_ns)  # noqa: S307

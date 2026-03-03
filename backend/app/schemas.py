@@ -3,12 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
-
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 class _OrmBase(BaseModel):
     model_config = {"from_attributes": True}
@@ -17,6 +17,7 @@ class _OrmBase(BaseModel):
 # ---------------------------------------------------------------------------
 # Auth / Token
 # ---------------------------------------------------------------------------
+
 
 class Token(BaseModel):
     access_token: str
@@ -32,6 +33,7 @@ class TokenPayload(BaseModel):
 # ---------------------------------------------------------------------------
 # Organization
 # ---------------------------------------------------------------------------
+
 
 class OrgCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -55,6 +57,7 @@ class OrgResponse(_OrmBase):
 # ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
+
 
 class UserCreate(BaseModel):
     email: str = Field(..., max_length=320)
@@ -93,6 +96,7 @@ class MemberAdd(BaseModel):
 # API Key
 # ---------------------------------------------------------------------------
 
+
 class ApiKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     scopes: dict | None = None
@@ -112,12 +116,14 @@ class ApiKeyResponse(_OrmBase):
 
 class ApiKeyCreated(ApiKeyResponse):
     """Returned only on creation — includes the raw key."""
+
     raw_key: str
 
 
 # ---------------------------------------------------------------------------
 # Test Suite
 # ---------------------------------------------------------------------------
+
 
 class TestSuiteCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -150,6 +156,7 @@ class TestSuiteResponse(_OrmBase):
 # Test Run
 # ---------------------------------------------------------------------------
 
+
 class TestRunCreate(BaseModel):
     trigger: str = "manual"
     metadata_: dict | None = Field(None, alias="metadata")
@@ -177,6 +184,7 @@ class TestRunDetail(TestRunResponse):
 # Test Result
 # ---------------------------------------------------------------------------
 
+
 class TestResultResponse(_OrmBase):
     id: uuid.UUID
     run_id: uuid.UUID
@@ -195,6 +203,7 @@ class TestResultResponse(_OrmBase):
 # Assertion Result
 # ---------------------------------------------------------------------------
 
+
 class AssertionResultResponse(_OrmBase):
     id: uuid.UUID
     result_id: uuid.UUID
@@ -210,6 +219,7 @@ class AssertionResultResponse(_OrmBase):
 # Drift Score
 # ---------------------------------------------------------------------------
 
+
 class DriftScoreResponse(_OrmBase):
     id: uuid.UUID
     suite_id: uuid.UUID
@@ -222,6 +232,7 @@ class DriftScoreResponse(_OrmBase):
 # ---------------------------------------------------------------------------
 # Alert Config
 # ---------------------------------------------------------------------------
+
 
 class AlertConfigCreate(BaseModel):
     suite_id: uuid.UUID | None = None
@@ -266,6 +277,7 @@ class AlertEventResponse(_OrmBase):
 # Audit Log
 # ---------------------------------------------------------------------------
 
+
 class AuditLogResponse(_OrmBase):
     id: uuid.UUID
     org_id: uuid.UUID
@@ -281,6 +293,7 @@ class AuditLogResponse(_OrmBase):
 # ---------------------------------------------------------------------------
 # Policy
 # ---------------------------------------------------------------------------
+
 
 class PolicyCreate(BaseModel):
     suite_id: uuid.UUID | None = None
@@ -318,6 +331,7 @@ class PolicyResponse(_OrmBase):
 # Dataset
 # ---------------------------------------------------------------------------
 
+
 class DatasetCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
@@ -343,6 +357,7 @@ class DatasetDetail(DatasetResponse):
 # Prompt Version
 # ---------------------------------------------------------------------------
 
+
 class PromptVersionResponse(_OrmBase):
     id: uuid.UUID
     suite_id: uuid.UUID
@@ -356,6 +371,7 @@ class PromptVersionResponse(_OrmBase):
 # ---------------------------------------------------------------------------
 # CI Check
 # ---------------------------------------------------------------------------
+
 
 class CICheckRequest(BaseModel):
     suite_id: uuid.UUID
@@ -375,12 +391,14 @@ class CICheckResponse(BaseModel):
 # Settings
 # ---------------------------------------------------------------------------
 
+
 class OrgSettingsOrg(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
     plan: str
     created_at: datetime
+
 
 class OrgSettingsApiKey(BaseModel):
     id: uuid.UUID
@@ -389,16 +407,19 @@ class OrgSettingsApiKey(BaseModel):
     created_at: datetime
     last_used_at: datetime | None = None
 
+
 class OrgSettingsMember(BaseModel):
     id: uuid.UUID
     email: str
     role: str
     created_at: datetime
 
+
 class OrgSettingsUsage(BaseModel):
     runs_this_month: int = 0
     suites_count: int = 0
     plan_limit: int = 1000
+
 
 class OrgSettingsResponse(BaseModel):
     org: OrgSettingsOrg
@@ -406,8 +427,10 @@ class OrgSettingsResponse(BaseModel):
     api_keys: list[OrgSettingsApiKey] = []
     usage: OrgSettingsUsage = OrgSettingsUsage()
 
+
 class OrgSettingsUpdate(BaseModel):
     org: OrgSettingsOrg | None = None
+
 
 class OrgSettings(BaseModel):
     name: str | None = None
@@ -419,6 +442,7 @@ class OrgSettings(BaseModel):
 # Webhook test
 # ---------------------------------------------------------------------------
 
+
 class WebhookTestRequest(BaseModel):
     channel: str = Field(..., pattern=r"^(slack|email|pagerduty|jira)$")
     destination: str
@@ -427,6 +451,7 @@ class WebhookTestRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Pagination wrapper
 # ---------------------------------------------------------------------------
+
 
 class PaginatedResponse(BaseModel):
     items: list

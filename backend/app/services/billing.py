@@ -52,9 +52,7 @@ class BillingService:
 
     async def check_quota(self, org_id: uuid.UUID, metric: str) -> bool:
         """Return True if the org is within its plan limits for *metric*."""
-        org = (
-            await self.db.execute(select(Organization).where(Organization.id == org_id))
-        ).scalar_one_or_none()
+        org = (await self.db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
 
         if org is None:
             return False

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -32,9 +31,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
-        None, "--version", "-v", callback=_version_callback, is_eager=True
-    ),
+    version: Optional[bool] = typer.Option(None, "--version", "-v", callback=_version_callback, is_eager=True),
 ) -> None:
     """DriftWatch — LLM output evaluation & drift monitoring."""
 
@@ -196,10 +193,12 @@ def drift(
     for f in sorted(hist_path.glob("*.json")):
         try:
             data = json.loads(f.read_text())
-            historical.append({
-                "pass_rate": data.get("pass_rate", 0.0),
-                "latency_ms": data.get("latency_ms", 0.0),
-            })
+            historical.append(
+                {
+                    "pass_rate": data.get("pass_rate", 0.0),
+                    "latency_ms": data.get("latency_ms", 0.0),
+                }
+            )
         except (json.JSONDecodeError, KeyError):
             console.print(f"[yellow]Skipping invalid file:[/yellow] {f.name}")
 

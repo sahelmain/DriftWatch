@@ -4,13 +4,13 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     Uuid,
@@ -33,7 +33,9 @@ class Organization(Base):
     users: Mapped[list[User]] = relationship("User", back_populates="organization", lazy="selectin")
     suites: Mapped[list[TestSuite]] = relationship("TestSuite", back_populates="organization", lazy="selectin")
     api_keys: Mapped[list[ApiKey]] = relationship("ApiKey", back_populates="organization", lazy="selectin")
-    alert_configs: Mapped[list[AlertConfig]] = relationship("AlertConfig", back_populates="organization", lazy="selectin")
+    alert_configs: Mapped[list[AlertConfig]] = relationship(
+        "AlertConfig", back_populates="organization", lazy="selectin"
+    )
     audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="organization", lazy="selectin")
     policies: Mapped[list[Policy]] = relationship("Policy", back_populates="organization", lazy="selectin")
     datasets: Mapped[list[Dataset]] = relationship("Dataset", back_populates="organization", lazy="selectin")
@@ -54,7 +56,9 @@ class User(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     organization: Mapped[Organization] = relationship("Organization", back_populates="users")
 
@@ -81,9 +85,7 @@ class ApiKey(Base):
 
 class TestSuite(Base):
     __tablename__ = "test_suites"
-    __table_args__ = (
-        Index("ix_test_suites_org_id", "org_id"),
-    )
+    __table_args__ = (Index("ix_test_suites_org_id", "org_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -93,12 +95,16 @@ class TestSuite(Base):
     schedule_cron: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     organization: Mapped[Organization] = relationship("Organization", back_populates="suites")
     runs: Mapped[list[TestRun]] = relationship("TestRun", back_populates="suite", lazy="selectin")
     drift_scores: Mapped[list[DriftScore]] = relationship("DriftScore", back_populates="suite", lazy="selectin")
-    prompt_versions: Mapped[list[PromptVersion]] = relationship("PromptVersion", back_populates="suite", lazy="selectin")
+    prompt_versions: Mapped[list[PromptVersion]] = relationship(
+        "PromptVersion", back_populates="suite", lazy="selectin"
+    )
 
 
 class TestRun(Base):
@@ -129,9 +135,7 @@ class TestRun(Base):
 
 class TestResult(Base):
     __tablename__ = "test_results"
-    __table_args__ = (
-        Index("ix_test_results_run_id", "run_id"),
-    )
+    __table_args__ = (Index("ix_test_results_run_id", "run_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("test_runs.id"), nullable=False)
@@ -145,14 +149,14 @@ class TestResult(Base):
     cost: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     run: Mapped[TestRun] = relationship("TestRun", back_populates="results")
-    assertion_results: Mapped[list[AssertionResult]] = relationship("AssertionResult", back_populates="result", lazy="selectin")
+    assertion_results: Mapped[list[AssertionResult]] = relationship(
+        "AssertionResult", back_populates="result", lazy="selectin"
+    )
 
 
 class AssertionResult(Base):
     __tablename__ = "assertion_results"
-    __table_args__ = (
-        Index("ix_assertion_results_result_id", "result_id"),
-    )
+    __table_args__ = (Index("ix_assertion_results_result_id", "result_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     result_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("test_results.id"), nullable=False)
@@ -186,9 +190,7 @@ class DriftScore(Base):
 
 class AlertConfig(Base):
     __tablename__ = "alert_configs"
-    __table_args__ = (
-        Index("ix_alert_configs_org_id", "org_id"),
-    )
+    __table_args__ = (Index("ix_alert_configs_org_id", "org_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     suite_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("test_suites.id"), nullable=True)
@@ -244,9 +246,7 @@ class AuditLog(Base):
 
 class Policy(Base):
     __tablename__ = "policies"
-    __table_args__ = (
-        Index("ix_policies_org_id", "org_id"),
-    )
+    __table_args__ = (Index("ix_policies_org_id", "org_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
@@ -264,9 +264,7 @@ class Policy(Base):
 
 class Dataset(Base):
     __tablename__ = "datasets"
-    __table_args__ = (
-        Index("ix_datasets_org_id", "org_id"),
-    )
+    __table_args__ = (Index("ix_datasets_org_id", "org_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
@@ -282,9 +280,7 @@ class Dataset(Base):
 
 class PromptVersion(Base):
     __tablename__ = "prompt_versions"
-    __table_args__ = (
-        Index("ix_prompt_versions_suite_id", "suite_id"),
-    )
+    __table_args__ = (Index("ix_prompt_versions_suite_id", "suite_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     suite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("test_suites.id"), nullable=False)
