@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     AUTO_CREATE_SCHEMA: bool = True
     ENABLE_INLINE_SCHEDULER: bool = True
+    ENABLE_INLINE_RUNS: bool = False
 
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.5
 
     OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4317"
 

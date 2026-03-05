@@ -25,6 +25,7 @@ class RunService:
         org_id: uuid.UUID,
         trigger: str = "manual",
         metadata_: dict | None = None,
+        dispatch_to_worker: bool = True,
     ) -> TestRun:
         run = TestRun(
             suite_id=suite_id,
@@ -36,7 +37,8 @@ class RunService:
         self.db.add(run)
         await self.db.flush()
 
-        self._dispatch_to_worker(run.id)
+        if dispatch_to_worker:
+            self._dispatch_to_worker(run.id)
         return run
 
     async def get_run(self, run_id: uuid.UUID) -> TestRun | None:
@@ -44,6 +46,7 @@ class RunService:
             select(TestRun)
             .where(TestRun.id == run_id)
             .options(
+                selectinload(TestRun.suite),
                 selectinload(TestRun.results).selectinload(TestResult.assertion_results),
             )
         )
@@ -57,7 +60,7 @@ class RunService:
         page: int = 1,
         limit: int = 20,
     ) -> tuple[list[TestRun], int]:
-        q = select(TestRun).where(TestRun.org_id == org_id)
+        q = select(TestRun).where(TestRun.org_id == org_id).options(selectinload(TestRun.suite))
         count_q = select(func.count(TestRun.id)).where(TestRun.org_id == org_id)
 
         if suite_id:

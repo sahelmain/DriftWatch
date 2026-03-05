@@ -15,6 +15,9 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session, create_tables
+from app.sentry_setup import init_sentry
+
+init_sentry()
 from app.models import TestSuite
 from app.services.runs import RunService
 

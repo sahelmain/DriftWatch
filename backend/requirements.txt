@@ -22,3 +22,4 @@ opentelemetry-exporter-prometheus
 prometheus-client
 jinja2
 pyyaml
+sentry-sdk[fastapi,celery]

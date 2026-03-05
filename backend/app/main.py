@@ -9,6 +9,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
+from app.sentry_setup import init_sentry
+
+init_sentry()
 
 logger = logging.getLogger("driftwatch")
 

@@ -230,6 +230,62 @@ class DriftScoreResponse(_OrmBase):
 
 
 # ---------------------------------------------------------------------------
+# Frontend compatibility responses
+# ---------------------------------------------------------------------------
+
+
+class ClientAssertionResponse(BaseModel):
+    name: str
+    type: str
+    passed: bool
+    expected: str | None = None
+    actual: str | None = None
+    message: str | None = None
+
+
+class ClientTestResultResponse(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    test_name: str
+    model: str
+    passed: bool
+    output: str | None
+    latency_ms: float | None
+    tokens_used: int | None = 0
+    cost: float | None = None
+    assertions: list[ClientAssertionResponse] = []
+
+
+class ClientTestRunResponse(BaseModel):
+    id: uuid.UUID
+    suite_id: uuid.UUID
+    suite_name: str | None = None
+    status: str
+    trigger: str
+    pass_rate: float | None = None
+    total_tests: int = 0
+    passed_tests: int = 0
+    failed_tests: int = 0
+    duration_ms: float | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class ClientTestRunDetailResponse(ClientTestRunResponse):
+    results: list[ClientTestResultResponse] = []
+
+
+class ClientDriftPointResponse(BaseModel):
+    date: datetime
+    pass_rate: float
+    drift_score: float
+    run_id: uuid.UUID
+    total_tests: int = 0
+    failed_tests: int = 0
+
+
+# ---------------------------------------------------------------------------
 # Alert Config
 # ---------------------------------------------------------------------------
 

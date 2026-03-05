@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 import uuid
@@ -10,7 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from app.database import get_db
+from app.config import settings
+from app.database import async_session, get_db
 from app.models import (
     AlertConfig,
     AuditLog,
@@ -31,10 +33,12 @@ from app.schemas import (
     AuditLogResponse,
     CICheckRequest,
     CICheckResponse,
+    ClientDriftPointResponse,
+    ClientTestRunDetailResponse,
+    ClientTestRunResponse,
     DatasetCreate,
     DatasetDetail,
     DatasetResponse,
-    DriftScoreResponse,
     LoginRequest,
     MemberAdd,
     OrgCreate,
@@ -50,8 +54,6 @@ from app.schemas import (
     PolicyResponse,
     PolicyUpdate,
     RegisterRequest,
-    TestRunDetail,
-    TestRunResponse,
     TestSuiteCreate,
     TestSuiteResponse,
     TestSuiteUpdate,
@@ -69,6 +71,7 @@ from app.services.auth import (
     verify_password,
 )
 from app.services.billing import BillingService
+from app.services.run_executor import execute_run as execute_run_inline
 from app.services.runs import RunService
 
 router = APIRouter(prefix="/api")
@@ -82,6 +85,122 @@ def _paginate(items: list, total: int, page: int, limit: int) -> PaginatedRespon
         limit=limit,
         pages=max(1, math.ceil(total / limit)),
     )
+
+
+def _stringify_json_value(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
+
+
+def _client_run_status(run: TestRun) -> str:
+    if run.status == "completed":
+        total = run.total_tests or 0
+        passed = run.passed_tests or 0
+        return "passed" if total == 0 or passed == total else "failed"
+    if run.status == "failed":
+        return "error"
+    return run.status
+
+
+def _duration_ms(run: TestRun) -> float | None:
+    if run.started_at is None or run.completed_at is None:
+        return None
+    return max((run.completed_at - run.started_at).total_seconds() * 1000, 0.0)
+
+
+def _serialize_run(run: TestRun, include_results: bool = False) -> ClientTestRunResponse | ClientTestRunDetailResponse:
+    suite = run.__dict__.get("suite")
+    total_tests = run.total_tests or 0
+    passed_tests = run.passed_tests or 0
+    payload = {
+        "id": run.id,
+        "suite_id": run.suite_id,
+        "suite_name": suite.name if suite is not None else None,
+        "status": _client_run_status(run),
+        "trigger": run.trigger,
+        "pass_rate": run.pass_rate,
+        "total_tests": total_tests,
+        "passed_tests": passed_tests,
+        "failed_tests": max(total_tests - passed_tests, 0),
+        "duration_ms": _duration_ms(run),
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "created_at": run.started_at or run.completed_at,
+    }
+    if not include_results:
+        return ClientTestRunResponse(**payload)
+
+    return ClientTestRunDetailResponse(
+        **payload,
+        results=[
+            {
+                "id": result.id,
+                "run_id": result.run_id,
+                "test_name": result.test_name,
+                "model": result.model,
+                "passed": result.passed,
+                "output": result.output,
+                "latency_ms": result.latency_ms,
+                "tokens_used": result.token_count or 0,
+                "cost": result.cost,
+                "assertions": [
+                    {
+                        "name": assertion.assertion_type,
+                        "type": assertion.assertion_type,
+                        "passed": assertion.passed,
+                        "expected": _stringify_json_value(assertion.expected),
+                        "actual": _stringify_json_value(assertion.actual),
+                        "message": assertion.message,
+                    }
+                    for assertion in result.assertion_results
+                ],
+            }
+            for result in run.results
+        ],
+    )
+
+
+def _serialize_timeline(runs: list[TestRun]) -> list[ClientDriftPointResponse]:
+    completed_runs = sorted(
+        [
+            run
+            for run in runs
+            if run.completed_at is not None and run.pass_rate is not None
+        ],
+        key=lambda run: run.completed_at or run.started_at,
+    )
+    timeline: list[ClientDriftPointResponse] = []
+    previous_fraction: float | None = None
+    for run in completed_runs:
+        pass_rate_fraction = (run.pass_rate or 0.0) / 100.0
+        total_tests = run.total_tests or 0
+        passed_tests = run.passed_tests or 0
+        drift_score = 0.0 if previous_fraction is None else abs(pass_rate_fraction - previous_fraction)
+        timeline.append(
+            ClientDriftPointResponse(
+                date=run.completed_at or run.started_at,
+                pass_rate=pass_rate_fraction,
+                drift_score=drift_score,
+                run_id=run.id,
+                total_tests=total_tests,
+                failed_tests=max(total_tests - passed_tests, 0),
+            )
+        )
+        previous_fraction = pass_rate_fraction
+    return timeline
+
+
+# --------------------------------------------------------------------------- #
+# Sentry verification (remove after confirming events appear)
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/sentry-test")
+async def sentry_test():
+    raise RuntimeError("Sentry backend test — safe to ignore")
 
 
 # --------------------------------------------------------------------------- #
@@ -303,7 +422,7 @@ async def delete_suite(suite_id: uuid.UUID, user: User = Depends(get_current_use
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/suites/{suite_id}/run", response_model=TestRunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/suites/{suite_id}/run", response_model=ClientTestRunResponse, status_code=status.HTTP_201_CREATED)
 async def trigger_run(
     suite_id: uuid.UUID,
     user: User = Depends(get_current_user),
@@ -314,8 +433,23 @@ async def trigger_run(
         raise HTTPException(status_code=402, detail="Run limit reached for your plan")
 
     svc = RunService(db)
-    run = await svc.create_run(suite_id, user.org_id, trigger="manual")
-    return run
+    run = await svc.create_run(
+        suite_id,
+        user.org_id,
+        trigger="manual",
+        dispatch_to_worker=not settings.ENABLE_INLINE_RUNS,
+    )
+    if not settings.ENABLE_INLINE_RUNS:
+        return _serialize_run(run)
+
+    await db.commit()
+    await execute_run_inline(run.id)
+
+    async with async_session() as refreshed_db:
+        refreshed = await RunService(refreshed_db).get_run(run.id)
+        if refreshed is None:
+            raise HTTPException(status_code=500, detail="Run execution failed to reload")
+        return _serialize_run(refreshed)
 
 
 @router.get("/runs", response_model=PaginatedResponse)
@@ -328,24 +462,30 @@ async def list_runs(
     db: AsyncSession = Depends(get_db),
 ):
     svc = RunService(db)
-    rows, total = await svc.list_runs(user.org_id, suite_id, run_status, page, limit)
-    items = [TestRunResponse.model_validate(r) for r in rows]
+    rows, _ = await svc.list_runs(user.org_id, suite_id, None, 1, 1000)
+    items = [_serialize_run(run) for run in rows]
+    if run_status:
+        items = [item for item in items if item.status == run_status]
+    total = len(items)
+    start_idx = (page - 1) * limit
+    items = items[start_idx : start_idx + limit]
     return _paginate(items, total, page, limit)
 
 
-@router.get("/runs/{run_id}", response_model=TestRunDetail)
+@router.get("/runs/{run_id}", response_model=ClientTestRunDetailResponse)
 async def get_run(run_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     svc = RunService(db)
     run = await svc.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run
+    return _serialize_run(run, include_results=True)
 
 
-@router.get("/drift/{suite_id}", response_model=list[DriftScoreResponse])
+@router.get("/drift/{suite_id}", response_model=list[ClientDriftPointResponse])
 async def get_drift(suite_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     svc = RunService(db)
-    return await svc.get_drift_timeline(suite_id)
+    rows, _ = await svc.list_runs(user.org_id, suite_id, None, 1, 1000)
+    return _serialize_timeline(rows)
 
 
 # --------------------------------------------------------------------------- #

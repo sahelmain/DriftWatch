@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- useAuth and AuthProvider are co-located by design */
 import { createContext, useContext, useState, useCallback } from "react";
+import * as Sentry from "@sentry/react";
 import type { User } from "./types";
 
 export interface AuthContextValue {
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("dw_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    Sentry.setUser({ id: newUser.id, email: newUser.email });
   }, []);
 
   const logout = useCallback(() => {
@@ -42,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.removeItem("dw_auto_login_started");
     setToken(null);
     setUser(null);
+    Sentry.setUser(null);
   }, []);
 
   return (

@@ -24,7 +24,11 @@ services:
         value: "true"
       - key: ENABLE_INLINE_SCHEDULER
         value: "false"
+      - key: ENABLE_INLINE_RUNS
+        value: "true"
       - key: CORS_ORIGINS
         value: '["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app","https://driftwatch-eight.vercel.app"]'
+      - key: SENTRY_DSN
+        sync: false
       - key: ENVIRONMENT
         value: production
