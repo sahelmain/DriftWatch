@@ -10,7 +10,7 @@ services:
     name: driftwatch-api
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     plan: starter
     healthCheckPath: /api/health
     preDeployCommand: python -m pip install -r backend/requirements.txt && cd backend && alembic upgrade head
@@ -34,6 +34,12 @@ services:
         value: '["https://driftwatch.vercel.app"]'
       - key: SENTRY_DSN
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LLM_MODEL_PRICING_JSON
+        sync: false
       - key: ENVIRONMENT
         value: production
 
@@ -41,7 +47,7 @@ services:
     name: driftwatch-worker
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     plan: starter
     dockerCommand: celery -A worker.runner.celery_app worker --loglevel=info --concurrency=2
     envVars:
@@ -58,12 +64,18 @@ services:
         value: "false"
       - key: SENTRY_DSN
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LLM_MODEL_PRICING_JSON
+        sync: false
 
   - type: cron
     name: driftwatch-scheduler
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     plan: starter
     schedule: "*/5 * * * *"
     dockerCommand: python -m app.scheduler_cron

@@ -79,6 +79,20 @@ def resolve_variables(suite: SuiteSpec) -> SuiteSpec:
     return suite
 
 
+def load_suite_content(raw: str, source: str = "<memory>") -> SuiteSpec:
+    """Parse YAML content already loaded into memory."""
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML in {source}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected a YAML mapping at top level in {source}")
+
+    suite = SuiteSpec.model_validate(data)
+    return resolve_variables(suite)
+
+
 def load_suite(path: str | Path) -> SuiteSpec:
     """Parse a YAML file and return a validated ``SuiteSpec``.
 
@@ -90,17 +104,7 @@ def load_suite(path: str | Path) -> SuiteSpec:
         raise FileNotFoundError(f"Suite file not found: {file_path}")
 
     raw = file_path.read_text(encoding="utf-8")
-    try:
-        data = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-        raise ValueError(f"Invalid YAML in {file_path}: {exc}") from exc
-
-    if not isinstance(data, dict):
-        raise ValueError(f"Expected a YAML mapping at top level in {file_path}")
-
-    suite = SuiteSpec.model_validate(data)
-    suite = resolve_variables(suite)
-    return suite
+    return load_suite_content(raw, source=str(file_path))
 
 
 def validate_suite(suite: SuiteSpec) -> list[str]:

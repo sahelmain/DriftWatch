@@ -5,14 +5,14 @@ import math
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from prometheus_client import generate_latest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from app.config import settings
-from app.database import async_session, get_db
+from app.database import get_db
 from app.models import (
     AlertConfig,
     AuditLog,
@@ -421,6 +421,7 @@ async def delete_suite(suite_id: uuid.UUID, user: User = Depends(get_current_use
 @router.post("/suites/{suite_id}/run", response_model=ClientTestRunResponse, status_code=status.HTTP_201_CREATED)
 async def trigger_run(
     suite_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -439,13 +440,8 @@ async def trigger_run(
         return _serialize_run(run)
 
     await db.commit()
-    await execute_run_inline(run.id)
-
-    async with async_session() as refreshed_db:
-        refreshed = await RunService(refreshed_db).get_run(run.id)
-        if refreshed is None:
-            raise HTTPException(status_code=500, detail="Run execution failed to reload")
-        return _serialize_run(refreshed)
+    background_tasks.add_task(execute_run_inline, str(run.id))
+    return _serialize_run(run)
 
 
 @router.get("/runs", response_model=PaginatedResponse)

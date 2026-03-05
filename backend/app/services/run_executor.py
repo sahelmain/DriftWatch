@@ -1,17 +1,38 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import async_session
 from app.models import TestRun, TestSuite
 from app.services.alerts import AlertService
 from app.services.runs import RunService
+from driftwatch.core.pricing import load_model_pricing
+from driftwatch.core.suite_loader import TestSpec, load_suite_content, validate_suite
+from driftwatch.eval.engine import EvaluationEngine, TestRunResult
 
 logger = logging.getLogger("driftwatch.executor")
+
+SUPPORTED_WEB_ASSERTIONS = frozenset(
+    {
+        "max_length",
+        "min_length",
+        "contains",
+        "not_contains",
+        "regex",
+        "exact_match",
+        "json_schema",
+        "latency",
+        "cost",
+    }
+)
+EXECUTION_ERROR_TYPE = "execution_error"
+RUN_EVALUATION_CONCURRENCY = 5
 
 
 async def execute_run(run_id: str | uuid.UUID) -> dict:
@@ -41,7 +62,7 @@ async def execute_run(run_id: str | uuid.UUID) -> dict:
             return {"status": "suite_not_found"}
 
         try:
-            results = _evaluate_suite(suite)
+            results = await _evaluate_suite(suite)
         except Exception:
             logger.exception("Evaluation failed for run %s", run_uuid)
             run.status = "failed"
@@ -63,51 +84,116 @@ async def execute_run(run_id: str | uuid.UUID) -> dict:
         return {"status": "completed", "tests": len(results)}
 
 
-def _evaluate_suite(suite) -> list[dict]:
-    """
-    Placeholder evaluation engine.
+async def _evaluate_suite(suite: TestSuite) -> list[dict]:
+    if not suite.yaml_content or not suite.yaml_content.strip():
+        raise ValueError(f"Suite {suite.id} has no YAML content")
 
-    In production this would parse the suite YAML, iterate test cases,
-    call LLM providers, run assertions, and return structured results.
-    """
-    import yaml
+    spec = load_suite_content(suite.yaml_content, source=f"suite {suite.id}")
+    errors = validate_suite(spec)
+    if errors:
+        raise ValueError("; ".join(errors))
 
-    tests: list[dict] = []
-    if not suite.yaml_content:
-        return tests
+    pricing = load_model_pricing(settings.LLM_MODEL_PRICING_JSON)
+    engine = EvaluationEngine(concurrency=RUN_EVALUATION_CONCURRENCY, pricing=pricing)
+    overrides = _provider_overrides()
+    semaphore = asyncio.Semaphore(RUN_EVALUATION_CONCURRENCY)
 
-    try:
-        spec = yaml.safe_load(suite.yaml_content)
-    except Exception:
-        logger.warning("Failed to parse YAML for suite %s", suite.id)
-        return tests
+    async def _run_test(test: TestSpec) -> dict:
+        async with semaphore:
+            model = test.model or spec.model_default
+            unsupported = sorted({a.type for a in test.assertions if a.type not in SUPPORTED_WEB_ASSERTIONS})
+            if unsupported:
+                return _execution_error_payload(
+                    test,
+                    model,
+                    f"Unsupported web assertions: {', '.join(unsupported)}",
+                )
 
-    if not isinstance(spec, dict):
-        return tests
+            provider_name = _infer_provider_name(model)
+            if not overrides.get(provider_name, {}).get("api_key"):
+                return _execution_error_payload(
+                    test,
+                    model,
+                    f"Missing {provider_name} API key for model '{model}'",
+                )
 
-    for tc in spec.get("tests", []):
-        tests.append(
+            if any(a.type == "cost" for a in test.assertions) and model not in pricing:
+                return _execution_error_payload(
+                    test,
+                    model,
+                    f"No pricing configured for model '{model}'",
+                )
+
+            try:
+                provider = engine.get_provider_for_model(model, overrides)
+                result = await engine.run_test(test, provider)
+            except Exception as exc:
+                logger.warning("Test '%s' failed during execution: %s", test.name, exc)
+                return _execution_error_payload(test, model, str(exc))
+
+            return _test_result_payload(result, test)
+
+    return await asyncio.gather(*[_run_test(test) for test in spec.tests])
+
+
+def _provider_overrides() -> dict[str, dict[str, str]]:
+    overrides: dict[str, dict[str, str]] = {}
+    if settings.OPENAI_API_KEY:
+        overrides["openai"] = {"api_key": settings.OPENAI_API_KEY}
+    if settings.ANTHROPIC_API_KEY:
+        overrides["anthropic"] = {"api_key": settings.ANTHROPIC_API_KEY}
+    return overrides
+
+
+def _infer_provider_name(model: str) -> str:
+    return "anthropic" if model.lower().startswith("claude") else "openai"
+
+
+def _test_result_payload(result: TestRunResult, test: TestSpec) -> dict:
+    return {
+        "test_name": result.test_name,
+        "prompt": result.prompt,
+        "model": result.model,
+        "output": result.output,
+        "passed": result.passed,
+        "latency_ms": result.latency_ms,
+        "token_count": result.token_count,
+        "cost": result.cost,
+        "assertions": [
             {
-                "test_name": tc.get("name", "unnamed"),
-                "prompt": tc.get("prompt", ""),
-                "model": tc.get("model", "gpt-4"),
-                "output": "[placeholder output]",
-                "passed": True,
-                "latency_ms": 0.0,
-                "token_count": 0,
-                "cost": 0.0,
-                "assertions": [
-                    {
-                        "assertion_type": a.get("type", "contains"),
-                        "passed": True,
-                        "expected": a.get("expected"),
-                        "actual": None,
-                        "score": 1.0,
-                        "message": "Placeholder assertion",
-                    }
-                    for a in tc.get("assertions", [])
-                ],
+                "assertion_type": assertion_spec.type,
+                "passed": assertion_result.passed,
+                "expected": assertion_result.expected,
+                "actual": assertion_result.actual,
+                "score": assertion_result.score,
+                "message": assertion_result.message,
             }
-        )
+            for assertion_spec, assertion_result in zip(
+                test.assertions,
+                result.assertion_results,
+            )
+        ],
+    }
 
-    return tests
+
+def _execution_error_payload(test: TestSpec, model: str, message: str) -> dict:
+    return {
+        "test_name": test.name,
+        "prompt": test.prompt,
+        "model": model,
+        "output": None,
+        "passed": False,
+        "latency_ms": None,
+        "token_count": None,
+        "cost": None,
+        "assertions": [
+            {
+                "assertion_type": EXECUTION_ERROR_TYPE,
+                "passed": False,
+                "expected": None,
+                "actual": None,
+                "score": None,
+                "message": message,
+            }
+        ],
+    }

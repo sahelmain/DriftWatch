@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,6 +10,7 @@ import yaml
 from driftwatch.core.suite_loader import (
     SuiteSpec,
     load_suite,
+    load_suite_content,
     resolve_variables,
     validate_suite,
 )
@@ -23,6 +23,23 @@ def _write_yaml(tmp_path: Path, data: dict) -> Path:
 
 
 class TestLoadSuite:
+    def test_load_from_string_content(self) -> None:
+        suite = load_suite_content(
+            """
+name: inline
+variables:
+  topic: reliability
+tests:
+  - name: t1
+    prompt: "Explain {topic}"
+    assertions:
+      - type: contains
+        value: ["reliability"]
+"""
+        )
+        assert suite.name == "inline"
+        assert suite.tests[0].prompt == "Explain reliability"
+
     def test_load_minimal(self, tmp_path: Path) -> None:
         data = {
             "name": "minimal",

@@ -45,7 +45,7 @@ curl http://localhost:8000/api/health
 # 4. Check the API health endpoint.
 curl https://driftwatch-api.onrender.com/api/health
 
-# 5. Trigger a manual run and verify it appears in the UI/API.
+# 5. Trigger a manual run and verify it appears immediately as Pending in the UI/API.
 # 6. Wait for the next Render cron tick and confirm each scheduled suite ran once.
 ```
 
@@ -342,7 +342,7 @@ Prefer a forward fix when a migration is already live and the downgrade path is 
 
 - **Target**: P99 latency < 500ms for non-evaluation endpoints
 - **Measurement**: Prometheus histogram `driftwatch_http_request_duration_seconds`
-- **Exclusions**: `POST /api/suites/{suite_id}/run` (long-running), file uploads
+- **Exclusions**: file uploads
 
 ### Evaluation Throughput
 

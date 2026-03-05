@@ -17,6 +17,9 @@ class ProviderResponse:
     model: str
     latency_ms: float
     token_count: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost: float | None = None
     raw_response: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,12 +103,16 @@ class OpenAIProvider(LLMProvider):
             choice = response.choices[0]
             text = choice.message.content or ""
             usage = response.usage
-            tokens = (usage.total_tokens if usage else 0) or 0
+            input_tokens = (usage.prompt_tokens if usage else 0) or 0
+            output_tokens = (usage.completion_tokens if usage else 0) or 0
+            tokens = (usage.total_tokens if usage else 0) or (input_tokens + output_tokens)
             return ProviderResponse(
                 text=text,
                 model=response.model,
                 latency_ms=round(latency, 2),
                 token_count=tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 raw_response=response.model_dump(),
             )
 
@@ -144,12 +151,16 @@ class AnthropicProvider(LLMProvider):
             )
             latency = (time.perf_counter() - start) * 1000
             text = response.content[0].text if response.content else ""
-            tokens = (response.usage.input_tokens + response.usage.output_tokens) if response.usage else 0
+            input_tokens = (response.usage.input_tokens if response.usage else 0) or 0
+            output_tokens = (response.usage.output_tokens if response.usage else 0) or 0
+            tokens = input_tokens + output_tokens
             return ProviderResponse(
                 text=text,
                 model=response.model,
                 latency_ms=round(latency, 2),
                 token_count=tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 raw_response=response.model_dump(),
             )
 

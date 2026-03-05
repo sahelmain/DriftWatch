@@ -164,6 +164,6 @@ class RunService:
         try:
             from worker.runner import execute_run
 
-            execute_run.delay(str(run_id))
+            execute_run.apply_async(args=[str(run_id)], ignore_result=True)
         except Exception:
             pass

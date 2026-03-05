@@ -244,6 +244,13 @@ class CostAssertion(BaseAssertion):
 
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         actual_cost = (context or {}).get("cost", 0.0)
+        if actual_cost is None:
+            return AssertionResult(
+                passed=False,
+                expected=f"<= ${self.budget}",
+                actual=None,
+                message="Cost data unavailable",
+            )
         passed = actual_cost <= self.budget
         return AssertionResult(
             passed=passed,
@@ -260,6 +267,13 @@ class LatencyAssertion(BaseAssertion):
 
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         actual_ms = (context or {}).get("latency_ms", 0.0)
+        if actual_ms is None:
+            return AssertionResult(
+                passed=False,
+                expected=f"<= {self.threshold_ms}ms",
+                actual=None,
+                message="Latency data unavailable",
+            )
         passed = actual_ms <= self.threshold_ms
         return AssertionResult(
             passed=passed,

@@ -10,7 +10,7 @@ services:
     name: driftwatch-api-free
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     plan: free
     healthCheckPath: /api/health
     envVars:
@@ -29,6 +29,12 @@ services:
       - key: CORS_ORIGINS
         value: '["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app","https://driftwatch-eight.vercel.app"]'
       - key: SENTRY_DSN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LLM_MODEL_PRICING_JSON
         sync: false
       - key: ENVIRONMENT
         value: production

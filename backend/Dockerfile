@@ -7,12 +7,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
-COPY . .
+COPY backend ./backend
+COPY driftwatch ./driftwatch
+COPY README.md pyproject.toml ./
 
+ENV PYTHONPATH=/app:/app/backend
 ENV PORT=8000
+WORKDIR /app/backend
 EXPOSE ${PORT}
 
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 4

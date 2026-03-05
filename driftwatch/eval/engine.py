@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from driftwatch.core.pricing import ModelPricing, estimate_cost
 from driftwatch.core.providers import LLMProvider, get_provider
 from driftwatch.core.suite_loader import AssertionSpec, SuiteSpec, TestSpec
 from driftwatch.eval.assertions import AssertionResult, build_assertion
@@ -24,6 +25,7 @@ class TestRunResult:
     assertion_results: list[AssertionResult]
     latency_ms: float
     token_count: int
+    cost: float | None
 
 
 @dataclass
@@ -66,9 +68,10 @@ def evaluate_assertions(
 class EvaluationEngine:
     """Runs test suites against LLM providers and evaluates outputs."""
 
-    def __init__(self, concurrency: int = 5) -> None:
+    def __init__(self, concurrency: int = 5, pricing: dict[str, ModelPricing] | None = None) -> None:
         self._concurrency = concurrency
         self._providers: dict[str, LLMProvider] = {}
+        self._pricing = pricing or {}
 
     def _get_or_create_provider(
         self,
@@ -82,6 +85,14 @@ class EvaluationEngine:
             self._providers[cache_key] = get_provider(name, **extra)
         return self._providers[cache_key]
 
+    def get_provider_for_model(
+        self,
+        model: str,
+        overrides: dict[str, Any] | None = None,
+    ) -> LLMProvider:
+        """Return the cached provider for *model*."""
+        return self._get_or_create_provider(model, overrides)
+
     async def run_test(
         self,
         test: TestSpec,
@@ -90,11 +101,15 @@ class EvaluationEngine:
         """Execute a single test and evaluate its assertions."""
         model = test.model or "gpt-4o"
         response = await provider.complete(test.prompt, model)
+        cost = estimate_cost(response.model, response.input_tokens, response.output_tokens, self._pricing)
+        response.cost = cost
 
         context: dict[str, Any] = {
             "latency_ms": response.latency_ms,
             "token_count": response.token_count,
-            "cost": 0.0,
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "cost": cost,
         }
         assertion_results = evaluate_assertions(response.text, test.assertions, context)
         all_passed = all(r.passed for r in assertion_results)
@@ -108,6 +123,7 @@ class EvaluationEngine:
             assertion_results=assertion_results,
             latency_ms=response.latency_ms,
             token_count=response.token_count,
+            cost=cost,
         )
 
     async def run_suite(
@@ -122,7 +138,7 @@ class EvaluationEngine:
         async def _bounded(test: TestSpec) -> TestRunResult:
             async with semaphore:
                 model = test.model or suite.model_default
-                provider = self._get_or_create_provider(model, provider_overrides)
+                provider = self.get_provider_for_model(model, provider_overrides)
                 return await self.run_test(test, provider)
 
         results = await asyncio.gather(*[_bounded(t) for t in suite.tests])

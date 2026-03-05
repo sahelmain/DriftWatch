@@ -112,6 +112,22 @@ docker compose up -d
 
 The dashboard is at `http://localhost:3000`, the API at `http://localhost:8000/api/docs`.
 
+## Web Evaluator Support
+
+The current web executor supports these assertion types:
+
+- `max_length`
+- `min_length`
+- `contains`
+- `not_contains`
+- `regex`
+- `exact_match`
+- `json_schema`
+- `latency`
+- `cost`
+
+`semantic_similarity`, `llm_judge`, and `custom` are intentionally deferred for the web runtime in this milestone.
+
 ## Production Deployment
 
 DriftWatch is set up to deploy the frontend on Vercel and the backend services on Render.
@@ -128,6 +144,8 @@ DriftWatch is set up to deploy the frontend on Vercel and the backend services o
 - Deploy [render.yaml](render.yaml) from the `main` branch.
 - Attach a shared Render environment group to the API, worker, and cron services and set `SECRET_KEY` there.
 - Set `AUTO_CREATE_SCHEMA=false` and `ENABLE_INLINE_SCHEDULER=false` in production.
+- Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on every service that executes runs.
+- Set `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
 - The API service runs an Alembic migration step before deploy; production schema changes should go through Alembic, not startup auto-creation.
 
 ### Production Verification
@@ -135,8 +153,9 @@ DriftWatch is set up to deploy the frontend on Vercel and the backend services o
 1. Confirm the GitHub CI workflow is green before merging to `main`.
 2. Verify the Render API migration step succeeds during deploy.
 3. Check `GET /api/health` after deploy.
-4. Trigger a manual run with `POST /api/suites/{suite_id}/run`.
-5. Confirm scheduled suites produce a single run on the next Render cron tick.
+4. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
+5. Poll `/api/runs/{run_id}` or the dashboard until the run completes with real results.
+6. Confirm scheduled suites produce a single run on the next Render cron tick.
 
 ## Tech Stack
 
@@ -202,11 +221,10 @@ driftwatch/
 ### Backend
 
 ```bash
-cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+pip install -r backend/requirements.txt
+uvicorn app.main:app --app-dir backend --reload
 ```
 
 ### Frontend
@@ -261,11 +279,15 @@ All configuration is via environment variables. See [backend/.env.example](backe
 | `SECRET_KEY`         | Shared JWT signing secret      | `change-me-in-production` |
 | `AUTO_CREATE_SCHEMA` | Auto-run `create_all()` at startup | `true` |
 | `ENABLE_INLINE_SCHEDULER` | Start APScheduler inside the API process | `true` |
+| `ENABLE_INLINE_RUNS` | Run evaluations in-process via background tasks instead of Celery | `false` |
 | `CORS_ORIGINS`       | Allowed CORS origins (JSON list) | `["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app"]` |
 | `VITE_API_URL`       | Frontend API base URL          | `/api`               |
 | `VITE_ENABLE_DEMO_AUTO_LOGIN` | Enable demo-only login bootstrap | `false` in production |
 | `OPENAI_API_KEY`     | OpenAI API key                 | —                    |
 | `ANTHROPIC_API_KEY`  | Anthropic API key              | —                    |
+| `LLM_MODEL_PRICING_JSON` | JSON pricing map shaped like `{"gpt-4o":{"input_per_million_tokens":1.0,"output_per_million_tokens":2.0}}` | `{}` |
+
+## Contributing
 
 ## Contributing
 

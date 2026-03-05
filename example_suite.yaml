@@ -1,5 +1,5 @@
 name: "example_suite"
-description: "Example DriftWatch test suite"
+description: "Example DriftWatch test suite using only the current web-supported assertion subset"
 model_default: "gpt-4o"
 variables:
   article: "The quick brown fox jumps over the lazy dog."
@@ -10,11 +10,10 @@ tests:
     assertions:
       - type: "max_length"
         value: 200
-      - type: "semantic_similarity"
-        reference: "A fox jumps over a dog."
-        threshold: 0.85
       - type: "contains"
         value: ["fox", "dog"]
+      - type: "not_contains"
+        value: ["I cannot", "I don't know"]
 
   - name: "json_output"
     prompt: "Return a JSON object with keys 'name' and 'age' for a person named Alice who is 30."
@@ -36,3 +35,6 @@ tests:
         value: ["I cannot", "I'm sorry"]
       - type: "max_length"
         value: 100
+
+# The current web runtime intentionally does not execute semantic_similarity,
+# llm_judge, or custom assertions yet.

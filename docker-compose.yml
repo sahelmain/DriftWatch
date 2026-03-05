@@ -3,8 +3,8 @@ version: "3.9"
 services:
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: driftwatch-api
     ports:
       - "8000:8000"
@@ -16,6 +16,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL_PRICING_JSON: '${LLM_MODEL_PRICING_JSON:-{}}'
     depends_on:
       db:
         condition: service_healthy
@@ -27,8 +30,8 @@ services:
 
   worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: driftwatch-worker
     command: celery -A worker.runner.celery_app worker --loglevel=info --concurrency=4
     environment:
@@ -36,6 +39,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL_PRICING_JSON: '${LLM_MODEL_PRICING_JSON:-{}}'
     depends_on:
       db:
         condition: service_healthy
@@ -47,8 +53,8 @@ services:
 
   scheduler:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: driftwatch-scheduler
     command: celery -A worker.runner.celery_app beat --loglevel=info
     environment:
