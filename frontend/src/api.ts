@@ -1,6 +1,8 @@
 import type {
   AuthResponse,
   Suite,
+  SuiteDraft,
+  SuiteValidationResponse,
   TestRun,
   DriftScore,
   AlertConfig,
@@ -17,10 +19,40 @@ class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public body: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSuiteValidationResponse(value: unknown): value is SuiteValidationResponse {
+  return (
+    isRecord(value) &&
+    typeof value.valid === "boolean" &&
+    Array.isArray(value.errors) &&
+    Array.isArray(value.warnings)
+  );
+}
+
+function getErrorMessageFromBody(body: unknown, fallback: string): string {
+  if (!isRecord(body)) {
+    return fallback;
+  }
+
+  if (typeof body.detail === "string" && body.detail) {
+    return body.detail;
+  }
+
+  if (isSuiteValidationResponse(body) && body.errors.length > 0) {
+    return body.errors[0]?.message || fallback;
+  }
+
+  return fallback;
 }
 
 async function fetchApi<T>(
@@ -50,8 +82,8 @@ async function fetchApi<T>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, body.detail || res.statusText);
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, getErrorMessageFromBody(body, res.statusText), body);
   }
 
   if (res.status === 204) return undefined as T;
@@ -59,6 +91,22 @@ async function fetchApi<T>(
 }
 
 export { ApiError };
+export function getApiErrorMessage(error: unknown, fallback = "Something went wrong."): string {
+  if (error instanceof ApiError) {
+    return error.message || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
+export function getSuiteValidationFromError(error: unknown): SuiteValidationResponse | null {
+  if (error instanceof ApiError && isSuiteValidationResponse(error.body)) {
+    return error.body;
+  }
+  return null;
+}
 
 // Auth
 export async function login(
@@ -89,7 +137,7 @@ export async function getSuites(): Promise<Suite[]> {
 }
 
 export async function createSuite(
-  data: Partial<Suite>,
+  data: SuiteDraft,
 ): Promise<Suite> {
   return fetchApi<Suite>("/suites", {
     method: "POST",
@@ -103,7 +151,7 @@ export async function getSuite(id: string): Promise<Suite> {
 
 export async function updateSuite(
   id: string,
-  data: Partial<Suite>,
+  data: SuiteDraft,
 ): Promise<Suite> {
   return fetchApi<Suite>(`/suites/${id}`, {
     method: "PUT",
@@ -113,6 +161,15 @@ export async function updateSuite(
 
 export async function deleteSuite(id: string): Promise<void> {
   return fetchApi<void>(`/suites/${id}`, { method: "DELETE" });
+}
+
+export async function validateSuiteDraft(
+  data: Required<Pick<SuiteDraft, "yaml_content">> & SuiteDraft,
+): Promise<SuiteValidationResponse> {
+  return fetchApi<SuiteValidationResponse>("/suites/validate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // Runs

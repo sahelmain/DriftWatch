@@ -128,6 +128,12 @@ The current web executor supports these assertion types:
 
 `semantic_similarity`, `llm_judge`, and `custom` are intentionally deferred for the web runtime in this milestone.
 
+## Suite Editor Flow
+
+- The web app now uses a dedicated suite editor at `/suites/new` and `/suites/:id/edit`.
+- YAML remains the source of truth, but the editor validates drafts live, ships supported starter templates, and blocks unsupported web-runtime assertions before save.
+- The top-level YAML `name` field is optional in the web editor. The suite name shown in the app comes from the separate Name field.
+
 ## Production Deployment
 
 DriftWatch is set up to deploy the frontend on Vercel and the backend services on Render.
@@ -142,10 +148,12 @@ DriftWatch is set up to deploy the frontend on Vercel and the backend services o
 ### Backend (Render)
 
 - Deploy [render.yaml](render.yaml) from the `main` branch.
+- For `driftwatch-api-free`, set the Render Root Directory / Docker build context to the repo root (`.`) and keep the Dockerfile path at `backend/Dockerfile`.
 - Attach a shared Render environment group to the API, worker, and cron services and set `SECRET_KEY` there.
 - Set `AUTO_CREATE_SCHEMA=false` and `ENABLE_INLINE_SCHEDULER=false` in production.
 - Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on every service that executes runs.
 - Set `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
+- Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually in Render when using Blueprint env vars marked `sync: false`.
 - The API service runs an Alembic migration step before deploy; production schema changes should go through Alembic, not startup auto-creation.
 
 ### Production Verification
@@ -153,9 +161,10 @@ DriftWatch is set up to deploy the frontend on Vercel and the backend services o
 1. Confirm the GitHub CI workflow is green before merging to `main`.
 2. Verify the Render API migration step succeeds during deploy.
 3. Check `GET /api/health` after deploy.
-4. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
-5. Poll `/api/runs/{run_id}` or the dashboard until the run completes with real results.
-6. Confirm scheduled suites produce a single run on the next Render cron tick.
+4. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
+5. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
+6. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with real results.
+7. Confirm scheduled suites produce a single run on the next Render cron tick.
 
 ## Tech Stack
 

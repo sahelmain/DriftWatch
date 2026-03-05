@@ -12,25 +12,13 @@ from app.database import async_session
 from app.models import TestRun, TestSuite
 from app.services.alerts import AlertService
 from app.services.runs import RunService
+from app.services.suite_validation import SUPPORTED_WEB_ASSERTIONS
 from driftwatch.core.pricing import load_model_pricing
 from driftwatch.core.suite_loader import TestSpec, load_suite_content, validate_suite
 from driftwatch.eval.engine import EvaluationEngine, TestRunResult
 
 logger = logging.getLogger("driftwatch.executor")
 
-SUPPORTED_WEB_ASSERTIONS = frozenset(
-    {
-        "max_length",
-        "min_length",
-        "contains",
-        "not_contains",
-        "regex",
-        "exact_match",
-        "json_schema",
-        "latency",
-        "cost",
-    }
-)
 EXECUTION_ERROR_TYPE = "execution_error"
 RUN_EVALUATION_CONCURRENCY = 5
 
@@ -88,7 +76,7 @@ async def _evaluate_suite(suite: TestSuite) -> list[dict]:
     if not suite.yaml_content or not suite.yaml_content.strip():
         raise ValueError(f"Suite {suite.id} has no YAML content")
 
-    spec = load_suite_content(suite.yaml_content, source=f"suite {suite.id}")
+    spec = load_suite_content(suite.yaml_content, source=f"suite {suite.id}", suite_name=suite.name)
     errors = validate_suite(spec)
     if errors:
         raise ValueError("; ".join(errors))

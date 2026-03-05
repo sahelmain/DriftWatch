@@ -42,11 +42,14 @@ curl http://localhost:8000/api/health
 # 2. Merge to main; Vercel and Render auto-deploy from the repo connection.
 # 3. Confirm the Render API pre-deploy step ran:
 #    python -m pip install -r backend/requirements.txt && cd backend && alembic upgrade head
+# 3a. Confirm the Render service Root Directory / Docker context is the repo root and Dockerfile path is backend/Dockerfile.
 # 4. Check the API health endpoint.
 curl https://driftwatch-api.onrender.com/api/health
 
-# 5. Trigger a manual run and verify it appears immediately as Pending in the UI/API.
-# 6. Wait for the next Render cron tick and confirm each scheduled suite ran once.
+# 5. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
+# 6. Trigger a manual run and verify it appears immediately as Pending in the UI/API.
+# 7. Open the run detail page and confirm it auto-refreshes to a terminal status.
+# 8. Wait for the next Render cron tick and confirm each scheduled suite ran once.
 ```
 
 **Required production configuration**
@@ -55,6 +58,8 @@ curl https://driftwatch-api.onrender.com/api/health
 - Set `SECRET_KEY` in that shared group before the first production deploy.
 - Keep `AUTO_CREATE_SCHEMA=false` on all backend services.
 - Keep `ENABLE_INLINE_SCHEDULER=false` on the API service so Render Cron remains the only scheduler.
+- Keep the Render Docker build context at the repo root and the Dockerfile path at `backend/Dockerfile`.
+- Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually on services where Blueprint env vars are marked `sync: false`.
 - Keep `VITE_ENABLE_DEMO_AUTO_LOGIN=false` in the Vercel production environment.
 
 ---

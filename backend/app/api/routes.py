@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from prometheus_client import generate_latest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.config import settings
 from app.database import get_db
@@ -54,6 +54,8 @@ from app.schemas import (
     PolicyResponse,
     PolicyUpdate,
     RegisterRequest,
+    SuiteValidationRequest,
+    SuiteValidationResponse,
     TestSuiteCreate,
     TestSuiteResponse,
     TestSuiteUpdate,
@@ -73,6 +75,7 @@ from app.services.auth import (
 from app.services.billing import BillingService
 from app.services.run_executor import execute_run as execute_run_inline
 from app.services.runs import RunService
+from app.services.suite_validation import validate_suite_draft
 
 router = APIRouter(prefix="/api")
 
@@ -187,6 +190,10 @@ def _serialize_timeline(runs: list[TestRun]) -> list[ClientDriftPointResponse]:
         )
         previous_fraction = pass_rate_fraction
     return timeline
+
+
+def _suite_validation_error_response(validation: SuiteValidationResponse) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=validation.model_dump(mode="json"))
 
 
 # --------------------------------------------------------------------------- #
@@ -357,6 +364,18 @@ async def list_suites(
     return _paginate(items, total, page, limit)
 
 
+@router.post("/suites/validate", response_model=SuiteValidationResponse)
+async def validate_suite_endpoint(
+    body: SuiteValidationRequest,
+    user: User = Depends(get_current_user),
+):
+    return validate_suite_draft(
+        name=body.name,
+        yaml_content=body.yaml_content,
+        schedule_cron=body.schedule_cron,
+    )
+
+
 @router.post("/suites", response_model=TestSuiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_suite(
     body: TestSuiteCreate,
@@ -366,6 +385,14 @@ async def create_suite(
     billing = BillingService(db)
     if not await billing.check_quota(user.org_id, "suites"):
         raise HTTPException(status_code=402, detail="Suite limit reached for your plan")
+
+    validation = validate_suite_draft(
+        name=body.name,
+        yaml_content=body.yaml_content,
+        schedule_cron=body.schedule_cron,
+    )
+    if not validation.valid:
+        return _suite_validation_error_response(validation)
 
     suite = TestSuite(
         name=body.name,
@@ -397,6 +424,18 @@ async def update_suite(
     suite = (await db.execute(select(TestSuite).where(TestSuite.id == suite_id))).scalar_one_or_none()
     if suite is None:
         raise HTTPException(status_code=404, detail="Suite not found")
+
+    merged_name = body.name if body.name is not None else suite.name
+    merged_yaml = body.yaml_content if body.yaml_content is not None else suite.yaml_content
+    merged_schedule = body.schedule_cron if body.schedule_cron is not None else suite.schedule_cron
+    validation = validate_suite_draft(
+        name=merged_name,
+        yaml_content=merged_yaml,
+        schedule_cron=merged_schedule,
+    )
+    if not validation.valid:
+        return _suite_validation_error_response(validation)
+
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(suite, field, value)
     await db.flush()

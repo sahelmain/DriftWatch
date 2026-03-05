@@ -7,6 +7,15 @@ from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 
+VALID_SUITE_YAML = """
+tests:
+  - name: t1
+    prompt: hello
+    assertions:
+      - type: contains
+        value: ["hello"]
+"""
+
 
 class TestAuth:
     async def test_register_returns_token_and_user(self, client: AsyncClient):
@@ -66,7 +75,7 @@ class TestSuites:
             json={
                 "name": "Test Suite",
                 "description": "A test suite",
-                "yaml_content": "tests: []",
+                "yaml_content": VALID_SUITE_YAML,
             },
         )
         assert create_res.status_code == 201
@@ -79,19 +88,126 @@ class TestSuites:
         assert get_res.json()["name"] == "Test Suite"
 
     async def test_update_suite(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/suites", json={"name": "Old Name"})
+        create_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Old Name", "yaml_content": VALID_SUITE_YAML},
+        )
         suite_id = create_res.json()["id"]
 
-        update_res = await auth_client.put(f"/api/suites/{suite_id}", json={"name": "New Name"})
+        update_res = await auth_client.put(
+            f"/api/suites/{suite_id}",
+            json={"name": "New Name", "yaml_content": VALID_SUITE_YAML},
+        )
         assert update_res.status_code == 200
         assert update_res.json()["name"] == "New Name"
 
     async def test_delete_suite(self, auth_client: AsyncClient):
-        create_res = await auth_client.post("/api/suites", json={"name": "To Delete"})
+        create_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "To Delete", "yaml_content": VALID_SUITE_YAML},
+        )
         suite_id = create_res.json()["id"]
 
         del_res = await auth_client.delete(f"/api/suites/{suite_id}")
         assert del_res.status_code == 204
+
+    async def test_validate_suite_returns_summary(self, auth_client: AsyncClient):
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={
+                "name": "Validated Suite",
+                "yaml_content": VALID_SUITE_YAML,
+                "schedule_cron": "0 * * * *",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is True
+        assert body["errors"] == []
+        assert body["suite_summary"]["test_count"] == 1
+        assert body["suite_summary"]["test_names"] == ["t1"]
+
+    async def test_validate_suite_rejects_malformed_yaml(self, auth_client: AsyncClient):
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={"name": "Bad Suite", "yaml_content": "tests: ["},
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["field"] == "yaml_content"
+        assert body["errors"][0]["code"] == "invalid_yaml"
+
+    async def test_validate_suite_rejects_unsupported_assertions(self, auth_client: AsyncClient):
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={
+                "name": "Unsupported Suite",
+                "yaml_content": """
+tests:
+  - name: semantic
+    prompt: hello
+    assertions:
+      - type: semantic_similarity
+        reference: hi
+        threshold: 0.9
+""",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["field"] == "assertions"
+        assert body["errors"][0]["test_name"] == "semantic"
+
+    async def test_validate_suite_rejects_invalid_cron(self, auth_client: AsyncClient):
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={
+                "name": "Bad Cron Suite",
+                "yaml_content": VALID_SUITE_YAML,
+                "schedule_cron": "not-a-cron",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["field"] == "schedule_cron"
+
+    async def test_create_suite_rejects_invalid_yaml_with_structured_errors(self, auth_client: AsyncClient):
+        res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Broken", "yaml_content": "tests: ["},
+        )
+        assert res.status_code == 400
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["field"] == "yaml_content"
+
+    async def test_update_suite_rejects_unsupported_assertions(self, auth_client: AsyncClient):
+        create_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Good", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = create_res.json()["id"]
+
+        update_res = await auth_client.put(
+            f"/api/suites/{suite_id}",
+            json={
+                "yaml_content": """
+tests:
+  - name: custom
+    prompt: hello
+    assertions:
+      - type: custom
+        expression: output.startswith("hello")
+""",
+            },
+        )
+        assert update_res.status_code == 400
+        body = update_res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["field"] == "assertions"
 
 
 class TestRuns:
@@ -104,7 +220,10 @@ class TestRuns:
         assert body["total"] == 0
 
     async def test_trigger_run(self, auth_client: AsyncClient):
-        suite_res = await auth_client.post("/api/suites", json={"name": "Run Suite"})
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Run Suite", "yaml_content": VALID_SUITE_YAML},
+        )
         suite_id = suite_res.json()["id"]
 
         run_res = await auth_client.post(f"/api/suites/{suite_id}/run")
@@ -115,7 +234,10 @@ class TestRuns:
         assert run["trigger"] == "manual"
 
     async def test_get_run(self, auth_client: AsyncClient):
-        suite_res = await auth_client.post("/api/suites", json={"name": "Run Suite 2"})
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Run Suite 2", "yaml_content": VALID_SUITE_YAML},
+        )
         suite_id = suite_res.json()["id"]
 
         run_res = await auth_client.post(f"/api/suites/{suite_id}/run")
@@ -298,7 +420,7 @@ class TestSmokeE2E:
             "/api/suites",
             json={
                 "name": "E2E Suite",
-                "yaml_content": "tests:\n  - name: t1\n    prompt: hello\n",
+                "yaml_content": VALID_SUITE_YAML,
             },
             headers=headers,
         )

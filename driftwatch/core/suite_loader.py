@@ -79,7 +79,7 @@ def resolve_variables(suite: SuiteSpec) -> SuiteSpec:
     return suite
 
 
-def load_suite_content(raw: str, source: str = "<memory>") -> SuiteSpec:
+def load_suite_content(raw: str, source: str = "<memory>", suite_name: str | None = None) -> SuiteSpec:
     """Parse YAML content already loaded into memory."""
     try:
         data = yaml.safe_load(raw)
@@ -88,6 +88,9 @@ def load_suite_content(raw: str, source: str = "<memory>") -> SuiteSpec:
 
     if not isinstance(data, dict):
         raise ValueError(f"Expected a YAML mapping at top level in {source}")
+
+    if suite_name and not data.get("name"):
+        data = {**data, "name": suite_name}
 
     suite = SuiteSpec.model_validate(data)
     return resolve_variables(suite)

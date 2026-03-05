@@ -40,6 +40,20 @@ tests:
         assert suite.name == "inline"
         assert suite.tests[0].prompt == "Explain reliability"
 
+    def test_load_from_string_content_uses_external_suite_name(self) -> None:
+        suite = load_suite_content(
+            """
+tests:
+  - name: t1
+    prompt: hello
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+            suite_name="external-name",
+        )
+        assert suite.name == "external-name"
+
     def test_load_minimal(self, tmp_path: Path) -> None:
         data = {
             "name": "minimal",

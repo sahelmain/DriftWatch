@@ -1,17 +1,29 @@
 from __future__ import annotations
 
+import uuid
 from contextlib import asynccontextmanager
 
 import pytest
 from app.config import settings
 from app.database import get_db
 from app.main import app
+from app.models import TestSuite as SuiteModel
 from app.services.run_executor import execute_run
 from httpx import AsyncClient
 
 from driftwatch.core.providers import LLMProvider, ProviderResponse
 
 pytestmark = pytest.mark.asyncio
+
+VALID_SUITE_YAML = """
+tests:
+  - name: t1
+    prompt: hello
+    model: gpt-4o
+    assertions:
+      - type: contains
+        value: ["hello"]
+"""
 
 
 class FakeProvider(LLMProvider):
@@ -74,6 +86,22 @@ async def _create_suite(auth_client: AsyncClient, yaml_content: str) -> str:
     )
     assert res.status_code == 201
     return res.json()["id"]
+
+
+async def _set_suite_yaml(suite_id: str, yaml_content: str) -> None:
+    override = app.dependency_overrides[get_db]
+    generator = override()
+    session = await generator.__anext__()
+    try:
+        suite = await session.get(SuiteModel, uuid.UUID(suite_id))
+        assert suite is not None
+        suite.yaml_content = yaml_content
+        await session.flush()
+    finally:
+        try:
+            await generator.__anext__()
+        except StopAsyncIteration:
+            pass
 
 
 async def _create_run(auth_client: AsyncClient, suite_id: str) -> str:
@@ -146,8 +174,9 @@ tests:
         fake_provider_factory: list[tuple[str, str]],
     ) -> None:
         _configure_provider_settings(monkeypatch)
-        suite_id = await _create_suite(
-            auth_client,
+        suite_id = await _create_suite(auth_client, VALID_SUITE_YAML)
+        await _set_suite_yaml(
+            suite_id,
             """
 name: unsupported-suite
 tests:
@@ -255,7 +284,8 @@ tests:
         fake_provider_factory: list[tuple[str, str]],
     ) -> None:
         _configure_provider_settings(monkeypatch)
-        suite_id = await _create_suite(auth_client, "tests: [")
+        suite_id = await _create_suite(auth_client, VALID_SUITE_YAML)
+        await _set_suite_yaml(suite_id, "tests: [")
         run_id = await _create_run(auth_client, suite_id)
 
         result = await execute_run(run_id)

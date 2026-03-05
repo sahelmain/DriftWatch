@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Loader2,
-  Play,
   ChevronLeft,
   ChevronRight,
   Filter,
+  Loader2,
+  Play,
 } from "lucide-react";
 import { format } from "date-fns";
-import { getRuns, getSuites } from "@/api";
-import type { TestRun, Suite, PaginatedResponse } from "@/types";
+import { getApiErrorMessage, getRuns, getSuites } from "@/api";
+import InlineBanner from "@/components/InlineBanner";
 import StatusBadge from "@/components/StatusBadge";
+import type { BannerState, PaginatedResponse, Suite, TestRun } from "@/types";
 
 export default function RunsPage() {
   const [runs, setRuns] = useState<TestRun[]>([]);
@@ -20,12 +21,22 @@ export default function RunsPage() {
   const [filterSuite, setFilterSuite] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [banner, setBanner] = useState<BannerState | null>(null);
   const perPage = 20;
 
   useEffect(() => {
     getSuites()
       .then(setSuites)
-      .catch(() => {});
+      .catch((error) => {
+        setBanner({
+          variant: "error",
+          title: "Unable to load suite filters",
+          message: getApiErrorMessage(
+            error,
+            "Suite filters could not be loaded.",
+          ),
+        });
+      });
   }, []);
 
   useEffect(() => {
@@ -36,13 +47,19 @@ export default function RunsPage() {
       page,
       limit: perPage,
     })
-      .then((res: PaginatedResponse<TestRun>) => {
-        setRuns(res.items);
-        setTotal(res.total);
+      .then((response: PaginatedResponse<TestRun>) => {
+        setRuns(response.items);
+        setTotal(response.total);
       })
-      .catch(() => {})
+      .catch((error) => {
+        setBanner({
+          variant: "error",
+          title: "Unable to load runs",
+          message: getApiErrorMessage(error, "Run history could not be loaded."),
+        });
+      })
       .finally(() => setLoading(false));
-  }, [page, filterSuite, filterStatus]);
+  }, [filterStatus, filterSuite, page]);
 
   const totalPages = Math.ceil(total / perPage) || 1;
 
@@ -50,33 +67,37 @@ export default function RunsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Test Runs</h1>
-        <p className="text-gray-400 mt-1">
+        <p className="mt-1 text-gray-400">
           Browse and filter all evaluation runs
         </p>
       </div>
+
+      {banner && (
+        <InlineBanner {...banner} onDismiss={() => setBanner(null)} />
+      )}
 
       <div className="flex items-center gap-3">
         <Filter size={16} className="text-gray-500" />
         <select
           className="select max-w-[200px]"
           value={filterSuite}
-          onChange={(e) => {
-            setFilterSuite(e.target.value);
+          onChange={(event) => {
+            setFilterSuite(event.target.value);
             setPage(1);
           }}
         >
           <option value="">All Suites</option>
-          {suites.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
+          {suites.map((suite) => (
+            <option key={suite.id} value={suite.id}>
+              {suite.name}
             </option>
           ))}
         </select>
         <select
           className="select max-w-[160px]"
           value={filterStatus}
-          onChange={(e) => {
-            setFilterStatus(e.target.value);
+          onChange={(event) => {
+            setFilterStatus(event.target.value);
             setPage(1);
           }}
         >
@@ -90,7 +111,7 @@ export default function RunsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64">
+        <div className="flex h-64 items-center justify-center">
           <Loader2 className="animate-spin text-drift-400" size={32} />
         </div>
       ) : runs.length > 0 ? (
@@ -101,7 +122,7 @@ export default function RunsPage() {
                 <th className="table-header">Run ID</th>
                 <th className="table-header">Suite</th>
                 <th className="table-header">Status</th>
-                <th className="table-header">Pass Rate</th>
+                <th className="table-header">Pass rate</th>
                 <th className="table-header">Tests</th>
                 <th className="table-header">Trigger</th>
                 <th className="table-header">Duration</th>
@@ -112,7 +133,7 @@ export default function RunsPage() {
               {runs.map((run) => (
                 <tr
                   key={run.id}
-                  className="border-b border-surface-700/50 hover:bg-surface-800/50 transition-colors"
+                  className="border-b border-surface-700/50 transition-colors hover:bg-surface-800/50"
                 >
                   <td className="table-cell">
                     <Link
@@ -142,7 +163,7 @@ export default function RunsPage() {
                         {run.pass_rate}%
                       </span>
                     ) : (
-                      <span className="text-gray-500">—</span>
+                      <span className="text-gray-500">-</span>
                     )}
                   </td>
                   <td className="table-cell">
@@ -156,38 +177,38 @@ export default function RunsPage() {
                   <td className="table-cell text-gray-300">
                     {run.duration_ms != null
                       ? `${(run.duration_ms / 1000).toFixed(1)}s`
-                      : "—"}
+                      : "-"}
                   </td>
                   <td className="table-cell text-gray-400">
                     {run.started_at
                       ? format(new Date(run.started_at), "MMM dd, HH:mm")
-                      : "—"}
+                      : "-"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div className="p-4 flex items-center justify-between border-t border-surface-700">
+          <div className="flex items-center justify-between border-t border-surface-700 p-4">
             <span className="text-sm text-gray-400">
               {total} total run{total !== 1 ? "s" : ""}
             </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page <= 1}
-                className="btn-secondary text-sm flex items-center gap-1"
+                className="btn-secondary flex items-center gap-1 text-sm"
               >
                 <ChevronLeft size={14} />
                 Prev
               </button>
-              <span className="text-sm text-gray-400 px-2">
+              <span className="px-2 text-sm text-gray-400">
                 {page} / {totalPages}
               </span>
               <button
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setPage((current) => current + 1)}
                 disabled={page >= totalPages}
-                className="btn-secondary text-sm flex items-center gap-1"
+                className="btn-secondary flex items-center gap-1 text-sm"
               >
                 Next
                 <ChevronRight size={14} />
@@ -197,10 +218,8 @@ export default function RunsPage() {
         </div>
       ) : (
         <div className="card p-16 text-center">
-          <Play className="mx-auto text-gray-600 mb-4" size={48} />
-          <h3 className="text-lg font-medium text-gray-300 mb-2">
-            No runs found
-          </h3>
+          <Play className="mx-auto mb-4 text-gray-600" size={48} />
+          <h3 className="mb-2 text-lg font-medium text-gray-300">No runs found</h3>
           <p className="text-gray-500">
             {filterSuite || filterStatus
               ? "Try adjusting your filters."

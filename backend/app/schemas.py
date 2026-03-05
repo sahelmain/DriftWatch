@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -126,7 +127,7 @@ class ApiKeyCreated(ApiKeyResponse):
 
 
 class TestSuiteCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
+    name: str | None = Field(default=None, max_length=255)
     description: str | None = None
     yaml_content: str | None = None
     schedule_cron: str | None = None
@@ -150,6 +151,37 @@ class TestSuiteResponse(_OrmBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ValidationIssue(BaseModel):
+    field: Literal["name", "yaml_content", "schedule_cron", "assertions"]
+    code: str
+    message: str
+    test_name: str | None = None
+    line: int | None = None
+    column: int | None = None
+
+
+class SuiteSummary(BaseModel):
+    test_count: int
+    test_names: list[str] = Field(default_factory=list)
+    models: list[str] = Field(default_factory=list)
+
+
+class SuiteValidationRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    yaml_content: str
+    schedule_cron: str | None = None
+
+
+class SuiteValidationResponse(BaseModel):
+    valid: bool
+    errors: list[ValidationIssue] = Field(default_factory=list)
+    warnings: list[ValidationIssue] = Field(default_factory=list)
+    supported_assertions: list[str] = Field(default_factory=list)
+    unsupported_assertions: list[str] = Field(default_factory=list)
+    suite_summary: SuiteSummary | None = None
 
 
 # ---------------------------------------------------------------------------

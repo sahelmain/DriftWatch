@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import SuitesPage from "./pages/SuitesPage";
+import SuiteEditorPage from "./pages/SuiteEditorPage";
 import TimelinePage from "./pages/TimelinePage";
 import RunDetailPage from "./pages/RunDetailPage";
 import AlertsPage from "./pages/AlertsPage";
@@ -41,6 +42,8 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/suites" element={<SuitesPage />} />
+                <Route path="/suites/new" element={<SuiteEditorPage />} />
+                <Route path="/suites/:id/edit" element={<SuiteEditorPage />} />
                 <Route path="/runs" element={<RunsPage />} />
                 <Route path="/runs/:id" element={<RunDetailPage />} />
                 <Route path="/timeline" element={<TimelinePage />} />

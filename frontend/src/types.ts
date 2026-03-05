@@ -27,6 +27,13 @@ export interface Suite {
   updated_at: string;
 }
 
+export interface SuiteDraft {
+  name?: string;
+  description?: string;
+  yaml_content?: string;
+  schedule_cron?: string;
+}
+
 export interface TestRun {
   id: string;
   suite_id: string;
@@ -50,11 +57,11 @@ export interface TestResult {
   test_name: string;
   model: string;
   passed: boolean;
-  output: string;
+  output: string | null;
   expected?: string;
-  latency_ms: number;
-  tokens_used: number;
-  cost?: number;
+  latency_ms: number | null;
+  tokens_used: number | null;
+  cost?: number | null;
   assertions: AssertionResult[];
 }
 
@@ -153,4 +160,36 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: User;
+}
+
+export interface ValidationIssue {
+  field: "name" | "yaml_content" | "schedule_cron" | "assertions";
+  code: string;
+  message: string;
+  test_name?: string;
+  line?: number;
+  column?: number;
+}
+
+export interface SuiteSummary {
+  test_count: number;
+  test_names: string[];
+  models: string[];
+}
+
+export interface SuiteValidationResponse {
+  valid: boolean;
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+  supported_assertions: string[];
+  unsupported_assertions: string[];
+  suite_summary?: SuiteSummary;
+}
+
+export interface BannerState {
+  variant: "success" | "info" | "warning" | "error";
+  title: string;
+  message?: string;
+  actionLabel?: string;
+  actionSuiteId?: string;
 }
