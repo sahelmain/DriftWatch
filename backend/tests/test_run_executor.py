@@ -72,7 +72,7 @@ def isolate_executor_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
                 pass
 
     monkeypatch.setattr("app.services.run_executor.async_session", _test_async_session)
-    monkeypatch.setattr("app.services.runs.RunService._dispatch_to_worker", staticmethod(lambda run_id: None))
+    monkeypatch.setattr("app.services.runs.RunService.dispatch_run", lambda self, run_id: None)
     monkeypatch.setattr(settings, "ENABLE_INLINE_RUNS", False)
 
 

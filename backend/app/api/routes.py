@@ -7,8 +7,9 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from prometheus_client import generate_latest
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from starlette.responses import JSONResponse, Response
 
 from app.config import settings
@@ -195,15 +196,30 @@ def _serialize_timeline(runs: list[TestRun]) -> list[ClientDriftPointResponse]:
 def _suite_validation_error_response(validation: SuiteValidationResponse) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=validation.model_dump(mode="json"))
 
+def _apply_client_run_status_filter(query, run_status: str | None):
+    if run_status is None:
+        return query
+    if run_status in {"pending", "running"}:
+        return query.where(TestRun.status == run_status)
+    if run_status == "error":
+        return query.where(TestRun.status == "failed")
 
-# --------------------------------------------------------------------------- #
-# Sentry verification (remove after confirming events appear)
-# --------------------------------------------------------------------------- #
-
-
-@router.get("/sentry-test")
-async def sentry_test():
-    raise RuntimeError("Sentry backend test — safe to ignore")
+    completed = query.where(TestRun.status == "completed")
+    if run_status == "passed":
+        return completed.where(
+            or_(
+                TestRun.total_tests.is_(None),
+                TestRun.total_tests == 0,
+                TestRun.passed_tests == TestRun.total_tests,
+            )
+        )
+    if run_status == "failed":
+        return completed.where(
+            TestRun.total_tests.is_not(None),
+            TestRun.total_tests > 0,
+            TestRun.passed_tests < TestRun.total_tests,
+        )
+    return query.where(TestRun.status == run_status)
 
 
 # --------------------------------------------------------------------------- #
@@ -473,12 +489,12 @@ async def trigger_run(
         suite_id,
         user.org_id,
         trigger="manual",
-        dispatch_to_worker=not settings.ENABLE_INLINE_RUNS,
     )
+    await db.commit()
     if not settings.ENABLE_INLINE_RUNS:
+        svc.dispatch_run(run.id)
         return _serialize_run(run)
 
-    await db.commit()
     background_tasks.add_task(execute_run_inline, str(run.id))
     return _serialize_run(run)
 
@@ -492,14 +508,27 @@ async def list_runs(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    svc = RunService(db)
-    rows, _ = await svc.list_runs(user.org_id, suite_id, None, 1, 1000)
+    base_query = select(TestRun).where(TestRun.org_id == user.org_id)
+    count_query = select(func.count(TestRun.id)).where(TestRun.org_id == user.org_id)
+
+    if suite_id:
+        base_query = base_query.where(TestRun.suite_id == suite_id)
+        count_query = count_query.where(TestRun.suite_id == suite_id)
+
+    base_query = _apply_client_run_status_filter(base_query, run_status)
+    count_query = _apply_client_run_status_filter(count_query, run_status)
+
+    total = (await db.execute(count_query)).scalar() or 0
+    rows = (
+        await db.execute(
+            base_query
+            .options(selectinload(TestRun.suite))
+            .order_by(TestRun.started_at.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+    ).scalars().all()
     items = [_serialize_run(run) for run in rows]
-    if run_status:
-        items = [item for item in items if item.status == run_status]
-    total = len(items)
-    start_idx = (page - 1) * limit
-    items = items[start_idx : start_idx + limit]
     return _paginate(items, total, page, limit)
 
 
@@ -515,7 +544,7 @@ async def get_run(run_id: uuid.UUID, user: User = Depends(get_current_user), db:
 @router.get("/drift/{suite_id}", response_model=list[ClientDriftPointResponse])
 async def get_drift(suite_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     svc = RunService(db)
-    rows, _ = await svc.list_runs(user.org_id, suite_id, None, 1, 1000)
+    rows = await svc.list_timeline_runs(user.org_id, suite_id)
     return _serialize_timeline(rows)
 
 

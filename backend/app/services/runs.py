@@ -25,7 +25,6 @@ class RunService:
         org_id: uuid.UUID,
         trigger: str = "manual",
         metadata_: dict | None = None,
-        dispatch_to_worker: bool = True,
     ) -> TestRun:
         run = TestRun(
             suite_id=suite_id,
@@ -36,9 +35,6 @@ class RunService:
         )
         self.db.add(run)
         await self.db.flush()
-
-        if dispatch_to_worker:
-            self._dispatch_to_worker(run.id)
         return run
 
     async def get_run(self, run_id: uuid.UUID) -> TestRun | None:
@@ -74,6 +70,25 @@ class RunService:
         q = q.order_by(TestRun.started_at.desc()).offset((page - 1) * limit).limit(limit)
         rows = (await self.db.execute(q)).scalars().all()
         return list(rows), total
+
+    async def list_timeline_runs(
+        self,
+        org_id: uuid.UUID,
+        suite_id: uuid.UUID,
+    ) -> list[TestRun]:
+        rows = (
+            await self.db.execute(
+                select(TestRun)
+                .where(
+                    TestRun.org_id == org_id,
+                    TestRun.suite_id == suite_id,
+                    TestRun.completed_at.isnot(None),
+                    TestRun.pass_rate.isnot(None),
+                )
+                .order_by(TestRun.completed_at.asc())
+            )
+        ).scalars().all()
+        return list(rows)
 
     async def compute_drift(self, suite_id: uuid.UUID) -> list[DriftScore]:
         runs = (
@@ -159,8 +174,7 @@ class RunService:
         run.completed_at = datetime.now(UTC)
         await self.db.flush()
 
-    @staticmethod
-    def _dispatch_to_worker(run_id: uuid.UUID) -> None:
+    def dispatch_run(self, run_id: uuid.UUID | str) -> None:
         try:
             from worker.runner import execute_run
 

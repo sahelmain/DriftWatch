@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+
 import pytest
+from app.config import settings
+from app.database import get_db
+from app.main import app
+from app.models import TestRun as TestRunModel
+from app.models import TestSuite as TestSuiteModel
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
+TestRunModel.__test__ = False
+TestSuiteModel.__test__ = False
 
 VALID_SUITE_YAML = """
 tests:
@@ -15,6 +26,20 @@ tests:
       - type: contains
         value: ["hello"]
 """
+
+
+@asynccontextmanager
+async def override_session():
+    override = app.dependency_overrides[get_db]
+    generator = override()
+    session = await generator.__anext__()
+    try:
+        yield session
+    finally:
+        try:
+            await generator.__anext__()
+        except StopAsyncIteration:
+            pass
 
 
 class TestAuth:
@@ -233,6 +258,30 @@ class TestRuns:
         assert run["status"] == "pending"
         assert run["trigger"] == "manual"
 
+    async def test_trigger_run_dispatches_via_service_when_inline_disabled(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        dispatched: list[str] = []
+
+        def _fake_dispatch(self, run_id):
+            dispatched.append(str(run_id))
+
+        monkeypatch.setattr(settings, "ENABLE_INLINE_RUNS", False)
+        monkeypatch.setattr("app.services.runs.RunService.dispatch_run", _fake_dispatch)
+
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Dispatch Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = suite_res.json()["id"]
+
+        run_res = await auth_client.post(f"/api/suites/{suite_id}/run")
+        assert run_res.status_code == 201
+        run_id = run_res.json()["id"]
+        assert dispatched == [run_id]
+
     async def test_get_run(self, auth_client: AsyncClient):
         suite_res = await auth_client.post(
             "/api/suites",
@@ -252,6 +301,110 @@ class TestRuns:
         assert res.status_code == 200
         body = res.json()
         assert body["page"] == 1
+
+    async def test_list_runs_filters_client_statuses_server_side(self, auth_client: AsyncClient):
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Filter Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = suite_res.json()["id"]
+
+        pending_res = await auth_client.post(f"/api/suites/{suite_id}/run")
+        pending_id = pending_res.json()["id"]
+        now = datetime.now(UTC)
+
+        async with override_session() as session:
+            suite = await session.get(TestSuiteModel, uuid.UUID(suite_id))
+            assert suite is not None
+            session.add_all(
+                [
+                    TestRunModel(
+                        suite_id=suite.id,
+                        org_id=suite.org_id,
+                        status="completed",
+                        trigger="manual",
+                        started_at=now - timedelta(minutes=3),
+                        completed_at=now - timedelta(minutes=2),
+                        total_tests=2,
+                        passed_tests=2,
+                        pass_rate=100.0,
+                    ),
+                    TestRunModel(
+                        suite_id=suite.id,
+                        org_id=suite.org_id,
+                        status="completed",
+                        trigger="manual",
+                        started_at=now - timedelta(minutes=2),
+                        completed_at=now - timedelta(minutes=1),
+                        total_tests=2,
+                        passed_tests=1,
+                        pass_rate=50.0,
+                    ),
+                    TestRunModel(
+                        suite_id=suite.id,
+                        org_id=suite.org_id,
+                        status="failed",
+                        trigger="manual",
+                    ),
+                ]
+            )
+            await session.flush()
+
+        pending = await auth_client.get("/api/runs?status=pending&page=1&limit=10")
+        assert pending.status_code == 200
+        assert pending.json()["total"] == 1
+        assert pending.json()["items"][0]["id"] == pending_id
+
+        passed = await auth_client.get("/api/runs?status=passed&page=1&limit=10")
+        assert passed.status_code == 200
+        assert passed.json()["total"] == 1
+        assert passed.json()["items"][0]["status"] == "passed"
+
+        failed = await auth_client.get("/api/runs?status=failed&page=1&limit=10")
+        assert failed.status_code == 200
+        assert failed.json()["total"] == 1
+        assert failed.json()["items"][0]["status"] == "failed"
+
+        errored = await auth_client.get("/api/runs?status=error&page=1&limit=10")
+        assert errored.status_code == 200
+        assert errored.json()["total"] == 1
+        assert errored.json()["items"][0]["status"] == "error"
+
+    async def test_drift_timeline_returns_more_than_one_thousand_runs(self, auth_client: AsyncClient):
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Timeline Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = suite_res.json()["id"]
+        base_time = datetime.now(UTC) - timedelta(minutes=1005)
+
+        async with override_session() as session:
+            suite = await session.get(TestSuiteModel, uuid.UUID(suite_id))
+            assert suite is not None
+            session.add_all(
+                [
+                    TestRunModel(
+                        suite_id=suite.id,
+                        org_id=suite.org_id,
+                        status="completed",
+                        trigger="manual",
+                        started_at=base_time + timedelta(minutes=index),
+                        completed_at=base_time + timedelta(minutes=index, seconds=30),
+                        total_tests=1,
+                        passed_tests=1 if index % 2 == 0 else 0,
+                        pass_rate=100.0 if index % 2 == 0 else 0.0,
+                    )
+                    for index in range(1005)
+                ]
+            )
+            await session.flush()
+
+        res = await auth_client.get(f"/api/drift/{suite_id}")
+        assert res.status_code == 200
+        body = res.json()
+        assert len(body) == 1005
+        assert body[0]["run_id"]
+        assert body[-1]["run_id"]
 
 
 class TestAlerts:

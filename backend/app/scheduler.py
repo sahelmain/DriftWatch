@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import async_session
 from app.models import TestSuite
 
@@ -16,16 +17,8 @@ scheduler = AsyncIOScheduler()
 
 
 async def _trigger_suite_run(suite_id: str) -> None:
-    """Run a suite — dispatches to Celery if available, else runs in-process."""
-    try:
-        from worker.runner import execute_run
-
-        execute_run.delay(suite_id)
-        logger.info("Dispatched scheduled run for suite %s via Celery", suite_id)
-        return
-    except Exception:
-        pass
-
+    """Create a scheduled run, then execute it via the configured runtime."""
+    from app.services.run_executor import execute_run as execute_run_inline
     from app.services.runs import RunService
 
     async with async_session() as db:
@@ -34,9 +27,17 @@ async def _trigger_suite_run(suite_id: str) -> None:
         if suite is None:
             logger.warning("Suite %s not found for scheduled run", suite_id)
             return
-        await svc.create_run(suite.id, suite.org_id, trigger="scheduled")
+
+        run = await svc.create_run(suite.id, suite.org_id, trigger="scheduled")
         await db.commit()
-        logger.info("In-process scheduled run created for suite %s", suite_id)
+
+        if settings.ENABLE_INLINE_RUNS:
+            await execute_run_inline(str(run.id))
+            logger.info("Executed scheduled run %s inline", run.id)
+            return
+
+        svc.dispatch_run(run.id)
+        logger.info("Dispatched scheduled run %s via Celery", run.id)
 
 
 async def load_scheduled_suites() -> None:

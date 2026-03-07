@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("dw_token");
     localStorage.removeItem("dw_user");
     sessionStorage.removeItem("dw_auto_login_started");
+    sessionStorage.removeItem("dw_demo_auto_login_started_v2");
     setToken(null);
     setUser(null);
     Sentry.setUser(null);

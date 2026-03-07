@@ -147,24 +147,39 @@ DriftWatch is set up to deploy the frontend on Vercel and the backend services o
 
 ### Backend (Render)
 
+**Free Inline**
+
+- Deploy [render.free.yaml](render.free.yaml) from the `main` branch.
+- Keep the Docker build context at the repo root (`.`) and the Dockerfile path at `backend/Dockerfile`.
+- Set `SECRET_KEY` on the `driftwatch-api-free` web service during Blueprint deploy.
+- The free Blueprint enables `AUTO_CREATE_SCHEMA=true`, `ENABLE_INLINE_SCHEDULER=false`, and `ENABLE_INLINE_RUNS=true` so the single API service can handle auth, suite CRUD, and manual runs without Celery.
+- Add `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on the API service if you want live model calls.
+- Add `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
+- The free path does not provision Redis, a worker, or a cron service. Scheduled runs are out of scope there.
+
+**Paid Full Stack**
+
 - Deploy [render.yaml](render.yaml) from the `main` branch.
-- For `driftwatch-api-free`, set the Render Root Directory / Docker build context to the repo root (`.`) and keep the Dockerfile path at `backend/Dockerfile`.
+- Keep the Docker build context at the repo root (`.`) and the Dockerfile path at `backend/Dockerfile`.
 - Attach a shared Render environment group to the API, worker, and cron services and set `SECRET_KEY` there.
-- Set `AUTO_CREATE_SCHEMA=false` and `ENABLE_INLINE_SCHEDULER=false` in production.
+- Keep `AUTO_CREATE_SCHEMA=false` and `ENABLE_INLINE_SCHEDULER=false` on the backend services.
 - Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on every service that executes runs.
 - Set `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
-- Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually in Render when using Blueprint env vars marked `sync: false`.
 - The API service runs an Alembic migration step before deploy; production schema changes should go through Alembic, not startup auto-creation.
+- Use the paid path only if you need Celery-backed execution and scheduled runs.
+
+If Render assigns a hostname other than the current target in [frontend/vercel.json](frontend/vercel.json), update that rewrite destination and redeploy Vercel before testing login or API-backed pages.
 
 ### Production Verification
 
 1. Confirm the GitHub CI workflow is green before merging to `main`.
-2. Verify the Render API migration step succeeds during deploy.
-3. Check `GET /api/health` after deploy.
-4. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
-5. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
-6. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with real results.
-7. Confirm scheduled suites produce a single run on the next Render cron tick.
+2. For the free path, verify `GET https://<your-render-host>/api/health` returns JSON and the database check is `ok`.
+3. If the Render hostname changed, update [frontend/vercel.json](frontend/vercel.json) and redeploy Vercel.
+4. Check `GET https://<your-vercel-host>/api/health` through the Vercel rewrite.
+5. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
+6. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
+7. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with real results.
+8. Only for the paid path: confirm the Render migration step succeeds and scheduled suites produce a single run on the next cron tick.
 
 ## Tech Stack
 

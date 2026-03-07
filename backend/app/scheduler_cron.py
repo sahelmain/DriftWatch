@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import async_session, create_tables
 from app.models import TestSuite
 from app.sentry_setup import init_sentry
+from app.services.run_executor import execute_run as execute_run_inline
 from app.services.runs import RunService
 
 init_sentry()
@@ -51,19 +52,32 @@ async def main() -> None:
             return
 
         svc = RunService(db)
+        created_run_ids: list[str] = []
         for suite in suites:
             try:
-                await svc.create_run(
+                run = await svc.create_run(
                     suite.id,
                     suite.org_id,
                     trigger="scheduled",
                 )
-                logger.info("Created scheduled run for suite %s", suite.id)
+                created_run_ids.append(str(run.id))
+                logger.info("Created scheduled run %s for suite %s", run.id, suite.id)
             except Exception:
                 logger.exception("Failed to create run for suite %s", suite.id)
 
         await db.commit()
-        logger.info("Cron tick complete — processed %d suites", len(suites))
+        for run_id in created_run_ids:
+            try:
+                if settings.ENABLE_INLINE_RUNS:
+                    await execute_run_inline(run_id)
+                    logger.info("Executed scheduled run %s inline", run_id)
+                else:
+                    svc.dispatch_run(run_id)
+                    logger.info("Dispatched scheduled run %s via Celery", run_id)
+            except Exception:
+                logger.exception("Failed to start execution for run %s", run_id)
+
+        logger.info("Cron tick complete — processed %d suites", len(created_run_ids))
 
 
 if __name__ == "__main__":
