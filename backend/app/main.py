@@ -6,9 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 
 from app.config import settings
+from app.rate_limit import limiter
 from app.sentry_setup import init_sentry
 
 init_sentry()
@@ -65,6 +68,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.limiter = limiter
 
     app.add_middleware(
         CORSMiddleware,
@@ -73,6 +77,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(SlowAPIMiddleware)
 
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -84,6 +89,11 @@ def create_app() -> FastAPI:
     from app.api.routes import router
 
     app.include_router(router)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        detail = exc.detail if isinstance(exc.detail, str) else "Too many requests. Try again later."
+        return JSONResponse(status_code=429, content={"detail": detail})
 
     @app.get("/api/health")
     async def health_check():

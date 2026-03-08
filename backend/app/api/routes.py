@@ -5,7 +5,7 @@ import math
 import re
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from prometheus_client import generate_latest
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from app.models import (
     TestSuite,
     User,
 )
+from app.rate_limit import demo_limit
 from app.schemas import (
     AlertConfigCreate,
     AlertConfigResponse,
@@ -74,6 +75,7 @@ from app.services.auth import (
     verify_password,
 )
 from app.services.billing import BillingService
+from app.services.demo_guardrails import build_run_metadata, count_recent_demo_runs_for_user
 from app.services.run_executor import execute_run as execute_run_inline
 from app.services.runs import RunService
 from app.services.suite_validation import validate_suite_draft
@@ -228,7 +230,8 @@ def _apply_client_run_status_filter(query, run_status: str | None):
 
 
 @router.post("/auth/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@demo_limit("5/minute", error_message="Too many registration attempts. Try again later.")
+async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     exists = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -253,7 +256,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/auth/login", response_model=Token)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+@demo_limit("10/minute", error_message="Too many login attempts. Try again later.")
+async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -381,7 +385,9 @@ async def list_suites(
 
 
 @router.post("/suites/validate", response_model=SuiteValidationResponse)
+@demo_limit("20/minute", error_message="Too many validation requests. Try again later.")
 async def validate_suite_endpoint(
+    request: Request,
     body: SuiteValidationRequest,
     user: User = Depends(get_current_user),
 ):
@@ -474,7 +480,9 @@ async def delete_suite(suite_id: uuid.UUID, user: User = Depends(get_current_use
 
 
 @router.post("/suites/{suite_id}/run", response_model=ClientTestRunResponse, status_code=status.HTTP_201_CREATED)
+@demo_limit("10/minute", error_message="Too many demo runs triggered from this IP. Try again later.")
 async def trigger_run(
+    request: Request,
     suite_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
@@ -484,11 +492,17 @@ async def trigger_run(
     if not await billing.check_quota(user.org_id, "runs"):
         raise HTTPException(status_code=402, detail="Run limit reached for your plan")
 
+    if settings.PUBLIC_DEMO_MODE:
+        runs_last_day = await count_recent_demo_runs_for_user(db, user.org_id, user.id)
+        if runs_last_day >= settings.DEMO_MAX_RUNS_PER_USER_PER_DAY:
+            raise HTTPException(status_code=429, detail="Daily demo run limit reached. Try again tomorrow.")
+
     svc = RunService(db)
     run = await svc.create_run(
         suite_id,
         user.org_id,
         trigger="manual",
+        metadata_=build_run_metadata(user.id),
     )
     await db.commit()
     if not settings.ENABLE_INLINE_RUNS:

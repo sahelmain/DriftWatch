@@ -11,8 +11,14 @@ from app.config import settings
 from app.database import async_session
 from app.models import TestRun, TestSuite
 from app.services.alerts import AlertService
+from app.services.demo_guardrails import (
+    disallowed_model_message,
+    is_demo_model_allowed,
+    normalize_gemini_error_message,
+)
 from app.services.runs import RunService
 from app.services.suite_validation import SUPPORTED_WEB_ASSERTIONS
+from driftwatch.core.llm import infer_provider_name
 from driftwatch.core.pricing import load_model_pricing
 from driftwatch.core.suite_loader import TestSpec, load_suite_content, validate_suite
 from driftwatch.eval.engine import EvaluationEngine, TestRunResult
@@ -97,7 +103,10 @@ async def _evaluate_suite(suite: TestSuite) -> list[dict]:
                     f"Unsupported web assertions: {', '.join(unsupported)}",
                 )
 
-            provider_name = _infer_provider_name(model)
+            if not is_demo_model_allowed(model):
+                return _execution_error_payload(test, model, disallowed_model_message(model))
+
+            provider_name = infer_provider_name(model)
             if not overrides.get(provider_name, {}).get("api_key"):
                 return _execution_error_payload(
                     test,
@@ -117,7 +126,11 @@ async def _evaluate_suite(suite: TestSuite) -> list[dict]:
                 result = await engine.run_test(test, provider)
             except Exception as exc:
                 logger.warning("Test '%s' failed during execution: %s", test.name, exc)
-                return _execution_error_payload(test, model, str(exc))
+                return _execution_error_payload(
+                    test,
+                    model,
+                    normalize_gemini_error_message(model, str(exc)),
+                )
 
             return _test_result_payload(result, test)
 
@@ -130,11 +143,13 @@ def _provider_overrides() -> dict[str, dict[str, str]]:
         overrides["openai"] = {"api_key": settings.OPENAI_API_KEY}
     if settings.ANTHROPIC_API_KEY:
         overrides["anthropic"] = {"api_key": settings.ANTHROPIC_API_KEY}
+    if settings.GEMINI_API_KEY:
+        overrides["gemini"] = {
+            "api_key": settings.GEMINI_API_KEY,
+            "base_url": settings.GEMINI_BASE_URL,
+            "rpm": settings.GEMINI_RPM,
+        }
     return overrides
-
-
-def _infer_provider_name(model: str) -> str:
-    return "anthropic" if model.lower().startswith("claude") else "openai"
 
 
 def _test_result_payload(result: TestRunResult, test: TestSpec) -> dict:

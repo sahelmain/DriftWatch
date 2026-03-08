@@ -30,6 +30,12 @@ services:
         value: '["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app","https://driftwatch-eight.vercel.app"]'
       - key: SENTRY_DSN
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: GEMINI_RPM
+        value: "10"
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY

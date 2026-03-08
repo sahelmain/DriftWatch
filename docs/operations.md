@@ -1,6 +1,6 @@
 # DriftWatch Operations Runbook
 
-This runbook assumes the managed production path is Vercel + Render. Later sections still include optional self-hosted reference material for teams operating their own infrastructure.
+This runbook assumes the public demo path is Vercel + Koyeb and the full-stack production path is Vercel + Render. Later sections still include optional self-hosted reference material for teams operating their own infrastructure.
 
 ## Table of Contents
 
@@ -35,33 +35,34 @@ docker compose ps
 curl http://localhost:8000/api/health
 ```
 
-### Render + Vercel (Free Inline)
+### Koyeb + Vercel (Public Demo)
 
 ```bash
 # 1. Verify CI passed for the commit that will be merged to main.
-# 2. Merge to main; Vercel and Render auto-deploy from the repo connection.
-# 3. Confirm the Render service uses render.free.yaml and the Docker context is the repo root.
-# 4. Check the API health endpoint on the actual Render hostname.
-curl https://<your-render-host>.onrender.com/api/health
+# 2. Merge to main; Vercel auto-deploys the frontend and Koyeb deploys the API.
+# 3. Confirm the Koyeb app mirrors koyeb.yaml and has PUBLIC_DEMO_MODE=true.
+# 4. Check the API health endpoint on the actual Koyeb hostname.
+curl https://<your-koyeb-host>/api/health
 
-# 5. If the hostname differs from frontend/vercel.json, update the Vercel rewrite target and redeploy the frontend.
-# 6. Verify the Vercel API rewrite.
+# 5. Confirm VITE_API_URL in Vercel points to the Koyeb /api base URL and redeploy the frontend if needed.
+# 6. Verify the public frontend can reach the backend.
 curl https://<your-vercel-host>/api/health
 
-# 7. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
+# 7. Create or edit a suite from the guided editor and confirm unsupported assertions and disallowed models are blocked before save.
 # 8. Trigger a manual run and verify it appears immediately as Pending in the UI/API.
-# 9. Open the run detail page and confirm it auto-refreshes to a terminal status.
+# 9. Open the run detail page and confirm it auto-refreshes to a terminal status with Gemini output.
 ```
 
-**Required free-inline configuration**
+**Required public-demo configuration**
 
-- Deploy [render.free.yaml](../render.free.yaml).
-- Set `SECRET_KEY` on the `driftwatch-api-free` web service before the first production deploy.
-- Keep `AUTO_CREATE_SCHEMA=true`, `ENABLE_INLINE_SCHEDULER=false`, and `ENABLE_INLINE_RUNS=true` on the free API service.
-- Keep the Render Docker build context at the repo root and the Dockerfile path at `backend/Dockerfile`.
-- Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually on the API service where Blueprint env vars are marked `sync: false`.
+- Configure the Koyeb app using [koyeb.yaml](../koyeb.yaml) as the source of truth for service shape and env values.
+- Set `SECRET_KEY` and `GEMINI_API_KEY` on the Koyeb API service before the first public deploy.
+- Keep `AUTO_CREATE_SCHEMA=true`, `ENABLE_INLINE_SCHEDULER=false`, `ENABLE_INLINE_RUNS=true`, and `PUBLIC_DEMO_MODE=true`.
+- Use Koyeb Postgres for the demo API.
+- Set `DEMO_ALLOWED_MODELS_JSON=["gemini-2.5-flash-lite"]`, `DEMO_MAX_TESTS_PER_SUITE=3`, and `DEMO_MAX_RUNS_PER_USER_PER_DAY=10`.
+- Set `VITE_API_URL=https://<your-koyeb-host>/api` in Vercel.
 - Keep `VITE_ENABLE_DEMO_AUTO_LOGIN=false` in the Vercel production environment.
-- The free path does not use Redis, a background worker, or a cron service.
+- The demo path does not use Redis, a background worker, or a cron service.
 
 ### Render + Vercel (Paid Full Stack)
 
@@ -85,7 +86,7 @@ curl https://driftwatch-api.onrender.com/api/health
 - Keep `AUTO_CREATE_SCHEMA=false` on all backend services.
 - Keep `ENABLE_INLINE_SCHEDULER=false` on the API service so Render Cron remains the only scheduler.
 - Keep the Render Docker build context at the repo root and the Dockerfile path at `backend/Dockerfile`.
-- Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually on services where Blueprint env vars are marked `sync: false`.
+- Add `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_MODEL_PRICING_JSON` manually on services where Blueprint env vars are marked `sync: false`.
 
 ---
 
@@ -312,7 +313,7 @@ curl -v https://driftwatch.vercel.app/api/health
 
 # Common causes:
 # - Vercel build failed -> redeploy after fixing the frontend build
-# - Rewrite misconfigured -> verify frontend/vercel.json and VITE_API_URL=/api
+# - Frontend cannot reach backend -> verify VITE_API_URL points at the live Koyeb or Render API host
 # - CORS issue -> verify CORS_ORIGINS env variable
 ```
 

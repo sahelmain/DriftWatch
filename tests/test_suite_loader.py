@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
 from driftwatch.core.suite_loader import (
     SuiteSpec,
     load_suite,
@@ -69,7 +70,7 @@ tests:
         suite = load_suite(path)
         assert suite.name == "minimal"
         assert len(suite.tests) == 1
-        assert suite.tests[0].model == "gpt-4o"  # default propagated
+        assert suite.tests[0].model == DEFAULT_LLM_MODEL  # default propagated
 
     def test_file_not_found(self) -> None:
         with pytest.raises(FileNotFoundError):

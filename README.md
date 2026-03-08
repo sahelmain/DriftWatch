@@ -26,14 +26,15 @@ graph TB
         Dashboard[Vercel Frontend]
     end
 
-    subgraph Backend
-        API[Render Web API]
-        Workers[Render Worker]
-        Scheduler[Render Cron]
+    subgraph DemoBackend
+        API[Koyeb API]
+        DB[(Koyeb PostgreSQL)]
     end
 
-    subgraph Data
-        DB[(PostgreSQL)]
+    subgraph FullStackBackend
+        RenderAPI[Render Web API]
+        Workers[Render Worker]
+        Scheduler[Render Cron]
         Redis[(Redis)]
     end
 
@@ -43,20 +44,23 @@ graph TB
     end
 
     subgraph External
-        LLM[LLM Providers]
+        LLM[Gemini / Other Providers]
         Notify[Slack / PagerDuty]
     end
 
     CLI -->|HTTP| API
-    Dashboard -->|/api rewrite| API
+    Dashboard -->|VITE_API_URL| API
     API --> DB
-    API --> Redis
+    RenderAPI --> DB
+    RenderAPI --> Redis
     Redis --> Workers
     Scheduler --> Redis
     Workers --> DB
     Workers --> LLM
     Workers --> Notify
+    API --> LLM
     API --> Prom
+    RenderAPI --> Prom
     Prom --> Graf
 ```
 
@@ -72,27 +76,31 @@ pip install driftwatch
 
 ```yaml
 # driftwatch.yml
-name: gpt4-quality-suite
-model: openai/gpt-4
-schedule: "0 */6 * * *"
+name: gemini-quality-suite
+model_default: gemini-2.5-flash-lite
+tests:
+  - name: greeting-check
+    prompt: "Say hello to the DriftWatch team in one sentence."
+    assertions:
+      - type: contains
+        value: ["hello", "DriftWatch"]
+      - type: max_length
+        value: 140
 
-metrics:
-  - accuracy
-  - latency_p95
-  - cost_per_token
-
-thresholds:
-  accuracy:
-    min: 0.92
-    drift_sensitivity: 0.05
-  latency_p95:
-    max: 2000
-
-test_cases:
-  - input: "Summarize this article about climate change."
-    expected_behavior: "factual, concise, under 200 words"
-  - input: "Translate 'Hello, how are you?' to French."
-    expected_output: "Bonjour, comment allez-vous ?"
+  - name: structured-profile
+    prompt: "Return a JSON object with keys name, role, and location for Ada Lovelace."
+    assertions:
+      - type: json_schema
+        schema:
+          type: object
+          required: ["name", "role", "location"]
+          properties:
+            name:
+              type: string
+            role:
+              type: string
+            location:
+              type: string
 ```
 
 ### Run an evaluation
@@ -136,50 +144,40 @@ The current web executor supports these assertion types:
 
 ## Production Deployment
 
-DriftWatch is set up to deploy the frontend on Vercel and the backend services on Render.
+DriftWatch supports two deployment shapes.
 
-### Frontend (Vercel)
+### Public Demo (Gemini + Koyeb + Vercel)
 
-- Deploy the `frontend/` app from the `main` branch.
-- Keep `VITE_API_URL=/api` so Vercel rewrites API requests to the Render backend.
-- Leave `VITE_ENABLE_DEMO_AUTO_LOGIN=false` in production.
-- Only set `VITE_DEMO_EMAIL`, `VITE_DEMO_PASSWORD`, and `VITE_DEMO_ORG` for demo environments where auto-login is intentionally enabled.
+- Deploy the `frontend/` app on Vercel.
+- Set `VITE_API_URL=https://<your-koyeb-domain>/api` in Vercel.
+- Keep `VITE_ENABLE_DEMO_AUTO_LOGIN=false` in production.
+- Deploy the backend API and Postgres on Koyeb Starter using the settings captured in [koyeb.yaml](koyeb.yaml).
+- Set `GEMINI_API_KEY` on Koyeb so manual runs use real Gemini responses.
+- Keep `PUBLIC_DEMO_MODE=true`, `ENABLE_INLINE_RUNS=true`, and `ENABLE_INLINE_SCHEDULER=false`.
+- The public demo intentionally does not provision Redis, a worker, or a cron service.
+- Default starter templates use `gemini-2.5-flash-lite` and omit `cost` assertions.
+- Demo guardrails limit allowed models, suite size, and run volume so the free Gemini quota lasts longer.
 
-### Backend (Render)
+### Paid Full Stack (Render)
 
-**Free Inline**
-
-- Deploy [render.free.yaml](render.free.yaml) from the `main` branch.
-- Keep the Docker build context at the repo root (`.`) and the Dockerfile path at `backend/Dockerfile`.
-- Set `SECRET_KEY` on the `driftwatch-api-free` web service during Blueprint deploy.
-- The free Blueprint enables `AUTO_CREATE_SCHEMA=true`, `ENABLE_INLINE_SCHEDULER=false`, and `ENABLE_INLINE_RUNS=true` so the single API service can handle auth, suite CRUD, and manual runs without Celery.
-- Add `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on the API service if you want live model calls.
-- Add `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
-- The free path does not provision Redis, a worker, or a cron service. Scheduled runs are out of scope there.
-
-**Paid Full Stack**
-
-- Deploy [render.yaml](render.yaml) from the `main` branch.
+- Deploy [render.yaml](render.yaml) from the `main` branch when you need Celery workers, Redis, and scheduled runs.
 - Keep the Docker build context at the repo root (`.`) and the Dockerfile path at `backend/Dockerfile`.
 - Attach a shared Render environment group to the API, worker, and cron services and set `SECRET_KEY` there.
 - Keep `AUTO_CREATE_SCHEMA=false` and `ENABLE_INLINE_SCHEDULER=false` on the backend services.
-- Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` on every service that executes runs.
+- Set the provider keys you plan to use (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) on every service that executes runs.
 - Set `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
 - The API service runs an Alembic migration step before deploy; production schema changes should go through Alembic, not startup auto-creation.
-- Use the paid path only if you need Celery-backed execution and scheduled runs.
-
-If Render assigns a hostname other than the current target in [frontend/vercel.json](frontend/vercel.json), update that rewrite destination and redeploy Vercel before testing login or API-backed pages.
 
 ### Production Verification
 
 1. Confirm the GitHub CI workflow is green before merging to `main`.
-2. For the free path, verify `GET https://<your-render-host>/api/health` returns JSON and the database check is `ok`.
-3. If the Render hostname changed, update [frontend/vercel.json](frontend/vercel.json) and redeploy Vercel.
-4. Check `GET https://<your-vercel-host>/api/health` through the Vercel rewrite.
-5. Create or edit a suite from the guided editor and confirm unsupported assertions are blocked before save.
+2. For the public demo path, verify `GET https://<your-koyeb-host>/api/health` returns JSON and the database check is `ok`.
+3. Set `VITE_API_URL` in Vercel to the live Koyeb host and redeploy the frontend.
+4. Check `GET https://<your-vercel-host>/api/health` and confirm the frontend can reach the backend.
+5. Create or edit a suite from the guided editor and confirm unsupported assertions or disallowed models are blocked before save.
 6. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
-7. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with real results.
-8. Only for the paid path: confirm the Render migration step succeeds and scheduled suites produce a single run on the next cron tick.
+7. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with Gemini output.
+8. For the paid Render path only: confirm the migration step succeeds and scheduled suites produce a single run on the next cron tick.
 
 ## Tech Stack
 
@@ -191,7 +189,7 @@ If Render assigns a hostname other than the current target in [frontend/vercel.j
 | Database      | PostgreSQL 16                    |
 | Frontend      | React 19, TypeScript, Vite       |
 | Observability | Prometheus, Grafana              |
-| Infra         | Docker Compose, Vercel, Render   |
+| Infra         | Docker Compose, Vercel, Koyeb, Render |
 
 ## Project Structure
 
@@ -227,6 +225,8 @@ driftwatch/
 ├── docs/                    # Documentation
 ├── .github/workflows/       # CI/CD pipelines
 ├── docker-compose.yml
+├── koyeb.yaml
+├── render.free.yaml
 ├── render.yaml
 ├── frontend/vercel.json
 └── README.md
@@ -299,14 +299,21 @@ All configuration is via environment variables. See [backend/.env.example](backe
 | Variable             | Description                    | Default              |
 |----------------------|--------------------------------|----------------------|
 | `DATABASE_URL`       | Async database connection string | Local SQLite file |
-| `REDIS_URL`          | Redis connection string        | `redis://localhost:6379/0` |
+| `REDIS_URL`          | Redis connection string for worker-based deployments | `redis://localhost:6379/0` |
 | `SECRET_KEY`         | Shared JWT signing secret      | `change-me-in-production` |
 | `AUTO_CREATE_SCHEMA` | Auto-run `create_all()` at startup | `true` |
 | `ENABLE_INLINE_SCHEDULER` | Start APScheduler inside the API process | `true` |
 | `ENABLE_INLINE_RUNS` | Run evaluations in-process via background tasks instead of Celery | `false` |
-| `CORS_ORIGINS`       | Allowed CORS origins (JSON list) | `["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app"]` |
-| `VITE_API_URL`       | Frontend API base URL          | `/api`               |
+| `PUBLIC_DEMO_MODE`   | Enable public-demo guardrails   | `false` |
+| `DEMO_ALLOWED_MODELS_JSON` | Allowed models in public demo mode | `["gemini-2.5-flash-lite"]` |
+| `DEMO_MAX_TESTS_PER_SUITE` | Max tests per suite in public demo mode | `3` |
+| `DEMO_MAX_RUNS_PER_USER_PER_DAY` | Rolling 24h run cap per user in public demo mode | `10` |
+| `CORS_ORIGINS`       | Allowed CORS origins (JSON list) | `["http://localhost:3000","http://localhost:5173","https://driftwatch.vercel.app","https://driftwatch-eight.vercel.app"]` |
+| `VITE_API_URL`       | Frontend API base URL          | `https://driftwatch-demo-api.koyeb.app/api` |
 | `VITE_ENABLE_DEMO_AUTO_LOGIN` | Enable demo-only login bootstrap | `false` in production |
+| `GEMINI_API_KEY`     | Gemini API key                 | —                    |
+| `GEMINI_BASE_URL`    | Gemini OpenAI-compatible endpoint | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `GEMINI_RPM`         | Gemini request cap per minute  | `10`                 |
 | `OPENAI_API_KEY`     | OpenAI API key                 | —                    |
 | `ANTHROPIC_API_KEY`  | Anthropic API key              | —                    |
 | `LLM_MODEL_PRICING_JSON` | JSON pricing map shaped like `{"gpt-4o":{"input_per_million_tokens":1.0,"output_per_million_tokens":2.0}}` | `{}` |

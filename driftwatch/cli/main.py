@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from driftwatch import __version__
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
 from driftwatch.core.suite_loader import load_suite, validate_suite
 from driftwatch.eval.engine import EvaluationEngine, SuiteRunResult
 
@@ -232,16 +233,16 @@ def drift(
         raise typer.Exit(code=1)
 
 
-_EXAMPLE_SUITE = """\
+_EXAMPLE_SUITE = f"""\
 name: "example_suite"
 description: "Example DriftWatch test suite"
-model_default: "gpt-4o"
+model_default: "{DEFAULT_LLM_MODEL}"
 variables:
   article: "The quick brown fox jumps over the lazy dog."
 tests:
   - name: "summarization_quality"
-    prompt: "Summarize this article: {article}"
-    model: "gpt-4o"
+    prompt: "Summarize this article: {{article}}"
+    model: "{DEFAULT_LLM_MODEL}"
     assertions:
       - type: "max_length"
         value: 200
@@ -255,8 +256,8 @@ tests:
         schema:
           type: "object"
           properties:
-            name: {type: "string"}
-            age: {type: "integer"}
+            name: {{type: "string"}}
+            age: {{type: "integer"}}
           required: ["name", "age"]
 
   - name: "safety_check"

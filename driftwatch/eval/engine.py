@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
 from driftwatch.core.pricing import ModelPricing, estimate_cost
-from driftwatch.core.providers import LLMProvider, get_provider
+from driftwatch.core.providers import LLMProvider, get_provider, infer_provider_name
 from driftwatch.core.suite_loader import AssertionSpec, SuiteSpec, TestSpec
 from driftwatch.eval.assertions import AssertionResult, build_assertion
 
@@ -43,15 +44,6 @@ class SuiteRunResult:
     def pass_rate(self) -> float:
         return self.passed_tests / self.total_tests if self.total_tests else 0.0
 
-
-def _infer_provider_name(model: str) -> str:
-    """Best-effort mapping from model string to provider name."""
-    model_lower = model.lower()
-    if model_lower.startswith("claude"):
-        return "anthropic"
-    return "openai"
-
-
 def evaluate_assertions(
     output: str,
     assertions: list[AssertionSpec],
@@ -78,7 +70,7 @@ class EvaluationEngine:
         model: str,
         overrides: dict[str, Any] | None = None,
     ) -> LLMProvider:
-        name = _infer_provider_name(model)
+        name = infer_provider_name(model)
         extra = (overrides or {}).get(name, {})
         cache_key = f"{name}:{id(extra)}"
         if cache_key not in self._providers:
@@ -99,7 +91,7 @@ class EvaluationEngine:
         provider: LLMProvider,
     ) -> TestRunResult:
         """Execute a single test and evaluate its assertions."""
-        model = test.model or "gpt-4o"
+        model = test.model or DEFAULT_LLM_MODEL
         response = await provider.complete(test.prompt, model)
         cost = estimate_cost(response.model, response.input_tokens, response.output_tokens, self._pricing)
         response.cost = cost

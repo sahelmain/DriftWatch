@@ -8,6 +8,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from driftwatch.core.llm import infer_provider_name
+
 
 @dataclass
 class ProviderResponse:
@@ -167,6 +169,18 @@ class AnthropicProvider(LLMProvider):
         return await _retry_with_backoff(_call)
 
 
+class GeminiProvider(OpenAIProvider):
+    """Provider backed by Google's OpenAI-compatible Gemini API."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/",
+        rpm: int = 10,
+    ) -> None:
+        super().__init__(api_key=api_key, base_url=base_url, rpm=rpm)
+
+
 class FailoverProvider(LLMProvider):
     """Wraps a primary provider with an optional fallback.
 
@@ -187,16 +201,29 @@ class FailoverProvider(LLMProvider):
 _PROVIDERS: dict[str, type[LLMProvider]] = {
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
+    "gemini": GeminiProvider,
 }
 
 
 def get_provider(name: str, **kwargs: Any) -> LLMProvider:
     """Factory that returns an ``LLMProvider`` by name.
 
-    Supported names: ``"openai"``, ``"anthropic"``.
+    Supported names: ``"openai"``, ``"anthropic"``, ``"gemini"``.
     Extra *kwargs* are forwarded to the provider constructor.
     """
     cls = _PROVIDERS.get(name.lower())
     if cls is None:
         raise ValueError(f"Unknown provider '{name}'. Choose from: {sorted(_PROVIDERS)}")
     return cls(**kwargs)
+
+
+__all__ = [
+    "AnthropicProvider",
+    "FailoverProvider",
+    "GeminiProvider",
+    "LLMProvider",
+    "OpenAIProvider",
+    "ProviderResponse",
+    "get_provider",
+    "infer_provider_name",
+]

@@ -40,9 +40,16 @@ class Settings(BaseSettings):
     JIRA_TOKEN: str = ""
     JIRA_PROJECT: str = ""
 
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    GEMINI_RPM: int = 10
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL_PRICING_JSON: str = "{}"
+    PUBLIC_DEMO_MODE: bool = False
+    DEMO_ALLOWED_MODELS_JSON: str = '["gemini-2.5-flash-lite"]'
+    DEMO_MAX_TESTS_PER_SUITE: int = 3
+    DEMO_MAX_RUNS_PER_USER_PER_DAY: int = 10
 
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.5
@@ -53,6 +60,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173",
         "https://driftwatch.vercel.app",
+        "https://driftwatch-eight.vercel.app",
     ]
 
 

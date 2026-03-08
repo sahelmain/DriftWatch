@@ -4,7 +4,13 @@ import yaml
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import ValidationError
 
+from app.config import settings
 from app.schemas import SuiteSummary, SuiteValidationResponse, ValidationIssue
+from app.services.demo_guardrails import (
+    disallowed_model_message,
+    is_demo_model_allowed,
+    too_many_tests_message,
+)
 from driftwatch.core.suite_loader import load_suite_content, validate_suite
 
 SUPPORTED_WEB_ASSERTIONS = frozenset(
@@ -93,6 +99,28 @@ def _validate_yaml_content(raw: str, *, suite_name: str | None) -> tuple[SuiteSu
                     test_name=test.name,
                 )
             )
+
+    if settings.PUBLIC_DEMO_MODE and len(spec.tests) > settings.DEMO_MAX_TESTS_PER_SUITE:
+        issues.append(
+            _issue(
+                field="yaml_content",
+                code="too_many_tests",
+                message=too_many_tests_message(len(spec.tests)),
+            )
+        )
+
+    if settings.PUBLIC_DEMO_MODE:
+        for test in spec.tests:
+            model = test.model or spec.model_default
+            if not is_demo_model_allowed(model):
+                issues.append(
+                    _issue(
+                        field="yaml_content",
+                        code="disallowed_model",
+                        message=disallowed_model_message(model),
+                        test_name=test.name,
+                    )
+                )
 
     models = sorted({(test.model or spec.model_default) for test in spec.tests})
     summary = SuiteSummary(

@@ -8,6 +8,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
+from driftwatch.core.providers import infer_provider_name
+
 
 @dataclass
 class AssertionResult:
@@ -193,12 +196,12 @@ class LLMJudgeAssertion(BaseAssertion):
     def __init__(
         self,
         rubric: str,
-        judge_model: str = "gpt-4o",
-        provider_name: str = "openai",
+        judge_model: str = DEFAULT_LLM_MODEL,
+        provider_name: str | None = None,
     ) -> None:
         self.rubric = rubric
         self.judge_model = judge_model
-        self.provider_name = provider_name
+        self.provider_name = provider_name or infer_provider_name(judge_model)
 
     def evaluate(self, output: str, context: dict[str, Any] | None = None) -> AssertionResult:
         import asyncio
@@ -379,9 +382,11 @@ def build_assertion(spec: Any) -> BaseAssertion:
     if spec.type == "json_schema":
         return cls(schema=spec.schema_ or {})
     if spec.type == "llm_judge":
+        judge_model = spec.judge_model or DEFAULT_LLM_MODEL
         return cls(
             rubric=spec.rubric or "",
-            judge_model=spec.judge_model or "gpt-4o",
+            judge_model=judge_model,
+            provider_name=infer_provider_name(judge_model),
         )
     if spec.type == "cost":
         return cls(budget=spec.budget or 0.0)

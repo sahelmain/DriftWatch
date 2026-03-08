@@ -13,7 +13,7 @@ export const suiteTemplates: SuiteTemplate[] = [
     yaml: `tests:
   - name: greeting-check
     prompt: "Say hello to the DriftWatch team in one sentence."
-    model: gpt-4o
+    model: gemini-2.5-flash-lite
     assertions:
       - type: contains
         value: ["hello", "DriftWatch"]
@@ -28,7 +28,7 @@ export const suiteTemplates: SuiteTemplate[] = [
     yaml: `tests:
   - name: structured-profile
     prompt: "Return a JSON object with keys name, role, and location for Ada Lovelace."
-    model: gpt-4o
+    model: gemini-2.5-flash-lite
     assertions:
       - type: json_schema
         schema:
@@ -44,20 +44,18 @@ export const suiteTemplates: SuiteTemplate[] = [
 `,
   },
   {
-    id: "latency-cost",
-    label: "Latency and cost",
-    description: "Track response speed and budget for a production prompt.",
+    id: "latency",
+    label: "Latency checks",
+    description: "Track response speed for a production prompt.",
     yaml: `tests:
   - name: concise-summary
     prompt: "Summarize the latest support ticket in under 50 words."
-    model: gpt-4o
+    model: gemini-2.5-flash-lite
     assertions:
       - type: max_length
         value: 220
       - type: latency
         threshold_ms: 1500
-      - type: cost
-        budget: 0.02
 `,
   },
   {
@@ -67,7 +65,7 @@ export const suiteTemplates: SuiteTemplate[] = [
     yaml: `tests:
   - name: my-test
     prompt: ""
-    model: gpt-4o
+    model: gemini-2.5-flash-lite
     assertions:
       - type: contains
         value: [""]

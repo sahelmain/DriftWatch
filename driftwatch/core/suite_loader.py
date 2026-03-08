@@ -9,6 +9,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
+
 
 class AssertionSpec(BaseModel):
     """Specification for a single assertion on LLM output."""
@@ -43,7 +45,7 @@ class SuiteSpec(BaseModel):
 
     name: str
     description: str = ""
-    model_default: str = "gpt-4o"
+    model_default: str = DEFAULT_LLM_MODEL
     tests: list[TestSpec] = Field(default_factory=list)
     variables: dict[str, Any] = Field(default_factory=dict)
 

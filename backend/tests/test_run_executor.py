@@ -11,6 +11,7 @@ from app.models import TestSuite as SuiteModel
 from app.services.run_executor import execute_run
 from httpx import AsyncClient
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
 from driftwatch.core.providers import LLMProvider, ProviderResponse
 
 pytestmark = pytest.mark.asyncio
@@ -114,7 +115,13 @@ async def _create_run(auth_client: AsyncClient, suite_id: str) -> str:
 def _configure_provider_settings(monkeypatch: pytest.MonkeyPatch, *, pricing_json: str = "{}") -> None:
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "openai-test-key")
     monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "anthropic-test-key")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setattr(settings, "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+    monkeypatch.setattr(settings, "GEMINI_RPM", 10)
     monkeypatch.setattr(settings, "LLM_MODEL_PRICING_JSON", pricing_json)
+    monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", False)
+    monkeypatch.setattr(settings, "DEMO_ALLOWED_MODELS_JSON", f'["{DEFAULT_LLM_MODEL}"]')
+    monkeypatch.setattr(settings, "DEMO_MAX_TESTS_PER_SUITE", 3)
 
 
 class TestExecuteRun:
@@ -277,6 +284,35 @@ tests:
         assert body["results"][0]["assertions"][0]["type"] == "execution_error"
         assert body["results"][1]["passed"] is True
 
+    async def test_gemini_runs_use_gemini_provider(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_provider_factory: list[tuple[str, str]],
+    ) -> None:
+        _configure_provider_settings(monkeypatch)
+        suite_id = await _create_suite(
+            auth_client,
+            f"""
+name: gemini-suite
+tests:
+  - name: gemini
+    prompt: hello from gemini
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["gemini"]
+""",
+        )
+        run_id = await _create_run(auth_client, suite_id)
+
+        await execute_run(run_id)
+
+        run_detail = await auth_client.get(f"/api/runs/{run_id}")
+        body = run_detail.json()
+        assert body["status"] == "passed"
+        assert ("gemini", "hello from gemini") in fake_provider_factory
+
     async def test_malformed_yaml_fails_run_without_partial_results(
         self,
         auth_client: AsyncClient,
@@ -326,6 +362,90 @@ tests:
         assert body["status"] == "failed"
         assert ("openai", "hello") not in fake_provider_factory
         assert "No pricing configured" in body["results"][0]["assertions"][0]["message"]
+
+    async def test_demo_mode_rejects_disallowed_models_without_provider_call(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_provider_factory: list[tuple[str, str]],
+    ) -> None:
+        _configure_provider_settings(monkeypatch)
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        monkeypatch.setattr(settings, "DEMO_ALLOWED_MODELS_JSON", f'["{DEFAULT_LLM_MODEL}"]')
+        suite_id = await _create_suite(
+            auth_client,
+            f"""
+name: disallowed-model-suite
+tests:
+  - name: premium
+    prompt: hello
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+        )
+        await _set_suite_yaml(
+            suite_id,
+            """
+name: disallowed-model-suite
+tests:
+  - name: premium
+    prompt: hello
+    model: gpt-4o
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+        )
+        run_id = await _create_run(auth_client, suite_id)
+
+        await execute_run(run_id)
+
+        run_detail = await auth_client.get(f"/api/runs/{run_id}")
+        body = run_detail.json()
+        assert body["status"] == "failed"
+        assert fake_provider_factory == []
+        assert "not available in the public demo" in body["results"][0]["assertions"][0]["message"]
+
+    async def test_gemini_quota_errors_are_normalized(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class QuotaProvider(LLMProvider):
+            async def complete(self, prompt: str, model: str, **kwargs) -> ProviderResponse:
+                raise RuntimeError("429 Resource exhausted: quota exceeded")
+
+        _configure_provider_settings(monkeypatch)
+        monkeypatch.setattr(
+            "driftwatch.eval.engine.get_provider",
+            lambda name, **kwargs: QuotaProvider(),
+        )
+        suite_id = await _create_suite(
+            auth_client,
+            f"""
+name: gemini-quota-suite
+tests:
+  - name: quota
+    prompt: hello
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+        )
+        run_id = await _create_run(auth_client, suite_id)
+
+        await execute_run(run_id)
+
+        run_detail = await auth_client.get(f"/api/runs/{run_id}")
+        body = run_detail.json()
+        assert body["status"] == "failed"
+        assert (
+            body["results"][0]["assertions"][0]["message"]
+            == "Gemini demo quota is temporarily exhausted. Try again later."
+        )
 
 
 class TestInlineDispatch:

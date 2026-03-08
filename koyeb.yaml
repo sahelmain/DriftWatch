@@ -1,0 +1,32 @@
+# Reference configuration for the public Gemini demo on Koyeb Starter.
+# Mirror these values in the Koyeb dashboard or CLI when creating the app.
+
+app:
+  name: driftwatch-demo-api
+  platform: koyeb-starter
+  service:
+    name: api
+    type: web
+    runtime: docker
+    dockerfile: backend/Dockerfile
+    context: .
+    port: 8000
+    health_check_path: /api/health
+  database:
+    engine: postgres
+    name: driftwatch-demo-db
+  environment:
+    SECRET_KEY: "<set in Koyeb>"
+    DATABASE_URL: "<managed Postgres connection string>"
+    AUTO_CREATE_SCHEMA: "true"
+    ENABLE_INLINE_SCHEDULER: "false"
+    ENABLE_INLINE_RUNS: "true"
+    PUBLIC_DEMO_MODE: "true"
+    DEMO_ALLOWED_MODELS_JSON: '["gemini-2.5-flash-lite"]'
+    DEMO_MAX_TESTS_PER_SUITE: "3"
+    DEMO_MAX_RUNS_PER_USER_PER_DAY: "10"
+    GEMINI_API_KEY: "<set in Koyeb>"
+    GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    GEMINI_RPM: "10"
+    CORS_ORIGINS: '["http://localhost:5173","https://driftwatch-eight.vercel.app"]'
+    SENTRY_DSN: "<optional>"

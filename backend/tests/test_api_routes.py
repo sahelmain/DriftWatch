@@ -14,6 +14,8 @@ from app.models import TestRun as TestRunModel
 from app.models import TestSuite as TestSuiteModel
 from httpx import AsyncClient
 
+from driftwatch.core.llm import DEFAULT_LLM_MODEL
+
 pytestmark = pytest.mark.asyncio
 TestRunModel.__test__ = False
 TestSuiteModel.__test__ = False
@@ -199,6 +201,81 @@ tests:
         assert body["valid"] is False
         assert body["errors"][0]["field"] == "schedule_cron"
 
+    async def test_validate_suite_rejects_disallowed_models_in_demo_mode(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        monkeypatch.setattr(settings, "DEMO_ALLOWED_MODELS_JSON", f'["{DEFAULT_LLM_MODEL}"]')
+
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={
+                "name": "Bad Model",
+                "yaml_content": """
+tests:
+  - name: t1
+    prompt: hello
+    model: gpt-4o
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["code"] == "disallowed_model"
+
+    async def test_validate_suite_rejects_too_many_tests_in_demo_mode(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        monkeypatch.setattr(settings, "DEMO_MAX_TESTS_PER_SUITE", 3)
+        monkeypatch.setattr(settings, "DEMO_ALLOWED_MODELS_JSON", f'["{DEFAULT_LLM_MODEL}"]')
+
+        res = await auth_client.post(
+            "/api/suites/validate",
+            json={
+                "name": "Too Many",
+                "yaml_content": f"""
+tests:
+  - name: t1
+    prompt: hello 1
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+  - name: t2
+    prompt: hello 2
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+  - name: t3
+    prompt: hello 3
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+  - name: t4
+    prompt: hello 4
+    model: {DEFAULT_LLM_MODEL}
+    assertions:
+      - type: contains
+        value: ["hello"]
+""",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["valid"] is False
+        assert body["errors"][0]["code"] == "too_many_tests"
+
     async def test_create_suite_rejects_invalid_yaml_with_structured_errors(self, auth_client: AsyncClient):
         res = await auth_client.post(
             "/api/suites",
@@ -257,6 +334,62 @@ class TestRuns:
         assert run["suite_id"] == suite_id
         assert run["status"] == "pending"
         assert run["trigger"] == "manual"
+
+    async def test_trigger_run_rejects_daily_demo_cap(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        monkeypatch.setattr(settings, "DEMO_MAX_RUNS_PER_USER_PER_DAY", 2)
+        monkeypatch.setattr(settings, "ENABLE_INLINE_RUNS", False)
+        monkeypatch.setattr("app.services.runs.RunService.dispatch_run", lambda self, run_id: None)
+
+        suite_res = await auth_client.post(
+            "/api/suites",
+            json={"name": "Demo Cap Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = suite_res.json()["id"]
+
+        first = await auth_client.post(f"/api/suites/{suite_id}/run")
+        second = await auth_client.post(f"/api/suites/{suite_id}/run")
+        third = await auth_client.post(f"/api/suites/{suite_id}/run")
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert third.status_code == 429
+        assert third.json()["detail"] == "Daily demo run limit reached. Try again tomorrow."
+
+    async def test_register_rate_limit_applies_in_demo_mode(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        ip_headers = {"X-Forwarded-For": "198.51.100.10"}
+
+        for index in range(5):
+            res = await client.post(
+                "/api/auth/register",
+                json={
+                    "email": f"demo-rate-{index}@test.io",
+                    "password": "pass1234",
+                    "org_name": f"Rate Org {index}",
+                },
+                headers=ip_headers,
+            )
+            assert res.status_code == 201
+
+        limited = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "demo-rate-limit@test.io",
+                "password": "pass1234",
+                "org_name": "Rate Org Limit",
+            },
+            headers=ip_headers,
+        )
+        assert limited.status_code == 429
 
     async def test_trigger_run_dispatches_via_service_when_inline_disabled(
         self,

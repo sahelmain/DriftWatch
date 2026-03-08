@@ -34,6 +34,12 @@ services:
         value: '["https://driftwatch.vercel.app"]'
       - key: SENTRY_DSN
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: GEMINI_RPM
+        value: "10"
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -64,6 +70,12 @@ services:
         value: "false"
       - key: SENTRY_DSN
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: GEMINI_RPM
+        value: "10"
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -93,6 +105,12 @@ services:
         value: "false"
       - key: SENTRY_DSN
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: GEMINI_RPM
+        value: "10"
   - type: keyvalue
     name: driftwatch-redis
     plan: starter
