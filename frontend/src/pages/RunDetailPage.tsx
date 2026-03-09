@@ -197,6 +197,7 @@ export default function RunDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const [fetchError, setFetchError] = useState<BannerState | null>(null);
+  const currentStatus = run?.status;
 
   const loadRun = useEffectEvent(async (options?: { manual?: boolean }) => {
     if (!id) {
@@ -235,10 +236,10 @@ export default function RunDetailPage() {
     setFetchError(null);
     setLoading(true);
     void loadRun();
-  }, [id]);
+  }, [id, loadRun]);
 
   useEffect(() => {
-    if (!run || !ACTIVE_RUN_STATUSES.has(run.status)) {
+    if (!currentStatus || !ACTIVE_RUN_STATUSES.has(currentStatus)) {
       return;
     }
 
@@ -249,7 +250,7 @@ export default function RunDetailPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [run?.status]);
+  }, [currentStatus, loadRun]);
 
   async function handleRefresh() {
     await loadRun({ manual: true });
