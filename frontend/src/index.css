@@ -6,6 +6,9 @@
   body {
     @apply bg-surface-900 text-gray-100 antialiased;
     font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background-image:
+      radial-gradient(circle at top left, rgba(59, 110, 255, 0.12), transparent 26%),
+      radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 22%);
   }
 
   ::-webkit-scrollbar {
@@ -29,6 +32,18 @@
 @layer components {
   .card {
     @apply bg-surface-800 border border-surface-700 rounded-xl;
+  }
+
+  .surface-panel {
+    @apply rounded-[24px] border border-surface-700 bg-surface-800/90;
+  }
+
+  .surface-panel-muted {
+    @apply rounded-[20px] border border-surface-700/80 bg-surface-950/35;
+  }
+
+  .surface-chip {
+    @apply rounded-full border border-surface-700 bg-surface-900/70 px-3 py-1 text-xs font-medium text-gray-300;
   }
 
   .btn-primary {

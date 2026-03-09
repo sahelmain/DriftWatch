@@ -25,6 +25,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  monitoringSignalToneStyles,
+  monitoringToneStyles,
+} from "@/lib/monitoringTone";
 import { getAlerts, getRuns, getSuites } from "@/api";
 import StatusBadge from "@/components/StatusBadge";
 import { getRunTimestamp } from "@/runTimestamps";
@@ -80,57 +84,6 @@ const EMPTY_RUNS_RESPONSE = {
   limit: 30,
   pages: 1,
 };
-
-const toneStyles = {
-  healthy: {
-    badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
-    icon: "bg-emerald-500/15 text-emerald-300",
-    panel: "border-emerald-500/20 bg-emerald-500/5",
-  },
-  attention: {
-    badge: "border-red-500/30 bg-red-500/10 text-red-200",
-    icon: "bg-red-500/15 text-red-300",
-    panel: "border-red-500/20 bg-red-500/5",
-  },
-  watch: {
-    badge: "border-amber-500/30 bg-amber-500/10 text-amber-200",
-    icon: "bg-amber-500/15 text-amber-300",
-    panel: "border-amber-500/20 bg-amber-500/5",
-  },
-  quiet: {
-    badge: "border-surface-600 bg-surface-800/80 text-gray-200",
-    icon: "bg-surface-700/70 text-gray-300",
-    panel: "border-surface-700 bg-surface-900/40",
-  },
-  active: {
-    badge: "border-drift-500/30 bg-drift-500/10 text-drift-200",
-    icon: "bg-drift-500/15 text-drift-300",
-    panel: "border-drift-500/20 bg-drift-500/5",
-  },
-} as const;
-
-const signalToneStyles = {
-  blue: {
-    icon: "bg-drift-500/15 text-drift-300",
-    ring: "from-drift-500/20 via-drift-500/5 to-transparent",
-  },
-  green: {
-    icon: "bg-emerald-500/15 text-emerald-300",
-    ring: "from-emerald-500/20 via-emerald-500/5 to-transparent",
-  },
-  amber: {
-    icon: "bg-amber-500/15 text-amber-300",
-    ring: "from-amber-500/20 via-amber-500/5 to-transparent",
-  },
-  red: {
-    icon: "bg-red-500/15 text-red-300",
-    ring: "from-red-500/20 via-red-500/5 to-transparent",
-  },
-  violet: {
-    icon: "bg-violet-500/15 text-violet-300",
-    ring: "from-violet-500/20 via-violet-500/5 to-transparent",
-  },
-} as const;
 
 function buildTrendData(runs: TestRun[]): TrendPoint[] {
   const grouped = new Map<string, { label: string; rates: number[] }>();
@@ -507,7 +460,7 @@ export default function DashboardPage() {
   const attentionItems = buildAttentionItems(snapshot);
   const latestRun = recentRuns[0] ?? null;
   const latestRunTimestamp = latestRun ? getRunTimestamp(latestRun) : null;
-  const healthTone = toneStyles[health.tone];
+  const healthTone = monitoringToneStyles[health.tone];
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -589,7 +542,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-5 space-y-3">
               {attentionItems.map((item) => {
-                const tone = toneStyles[item.tone];
+                const tone = monitoringToneStyles[item.tone];
                 return (
                   <div
                     key={item.label}
@@ -621,7 +574,7 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => {
-          const tone = signalToneStyles[card.tone];
+          const tone = monitoringSignalToneStyles[card.tone];
           return (
             <div
               key={card.label}
@@ -775,7 +728,7 @@ export default function DashboardPage() {
 
           <div className="mt-6 space-y-3">
             {attentionItems.map((item) => {
-              const tone = toneStyles[item.tone];
+              const tone = monitoringToneStyles[item.tone];
               return (
                 <div
                   key={item.label}
