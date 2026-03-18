@@ -34,8 +34,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-64 bg-surface-950 border-r border-surface-700 flex flex-col shrink-0">
+    <div className="flex h-screen overflow-hidden bg-surface-950">
+      <aside className="w-64 shrink-0 border-r border-surface-700 bg-surface-950/95 backdrop-blur">
         <div className="px-6 py-5 border-b border-surface-700">
           <Link to={APP_ROUTES.root} className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-drift-500 to-drift-700 flex items-center justify-center">
@@ -85,8 +85,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-8">{children}</div>
+      <main className="relative flex-1 overflow-y-auto">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,110,255,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.06),transparent_18%)]" />
+        <div className="relative mx-auto w-full max-w-[1560px] px-5 py-6 sm:px-8 sm:py-8">
+          {children}
+        </div>
       </main>
     </div>
   );
