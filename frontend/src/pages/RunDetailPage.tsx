@@ -321,7 +321,7 @@ export default function RunDetailPage() {
     setFetchError(null);
     setLoading(true);
     void loadRun();
-  }, [id, loadRun]);
+  }, [id]);
 
   useEffect(() => {
     if (!currentStatus || !ACTIVE_RUN_STATUSES.has(currentStatus)) {
@@ -335,7 +335,7 @@ export default function RunDetailPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentStatus, loadRun]);
+  }, [currentStatus]);
 
   async function handleRefresh() {
     await loadRun({ manual: true });
