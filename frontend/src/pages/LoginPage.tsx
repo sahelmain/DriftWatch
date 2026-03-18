@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Activity, Mail, Lock, Building2, Loader2 } from "lucide-react";
 import { login, register, ApiError } from "@/api";
 import { useAuth } from "@/AuthContext";
+import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
 
 const AUTO_LOGIN_KEY = "dw_demo_auto_login_started_v2";
 const DEMO_AUTO_LOGIN_ENABLED =
@@ -19,11 +20,18 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { setAuth } = useAuth();
+  const state = location.state as
+    | { from?: { pathname?: string; search?: string } }
+    | null;
+  const returnPath = state?.from?.pathname
+    ? `${state.from.pathname}${state.from.search ?? ""}`
+    : APP_ROUTES.root;
 
   useEffect(() => {
     if (localStorage.getItem("dw_token")) {
-      navigate("/");
+      navigate(returnPath, { replace: true });
       return;
     }
     if (
@@ -64,7 +72,7 @@ export default function LoginPage() {
           }
         }
         setAuth(res.access_token, res.user);
-        navigate("/");
+        navigate(returnPath, { replace: true });
       } catch (err) {
         sessionStorage.removeItem(AUTO_LOGIN_KEY);
         setError(
@@ -78,7 +86,7 @@ export default function LoginPage() {
     }
 
     void runAutoLogin();
-  }, [navigate, setAuth]);
+  }, [navigate, returnPath, setAuth]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,7 +99,7 @@ export default function LoginPage() {
           ? await login(email, password)
           : await register(email, password, orgName);
       setAuth(res.access_token, res.user);
-      navigate("/");
+      navigate(returnPath, { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -116,7 +124,10 @@ export default function LoginPage() {
             <Activity className="text-white" size={28} />
           </div>
           <h1 className="text-2xl font-bold text-white">DriftWatch</h1>
-          <p className="text-gray-400 mt-1">LLM Evaluation Drift Tracking</p>
+          <p className="text-gray-400 mt-1">
+            AI quality control for support assistants and other production
+            workflows
+          </p>
         </div>
 
         <div className="card p-8">
@@ -224,9 +235,15 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-gray-500 text-xs mt-6">
-          Monitor LLM evaluation drift in real time
-        </p>
+        <div className="mt-6 space-y-2 text-center text-xs text-gray-500">
+          <p>Define product rules, run evaluations, and track quality change over time.</p>
+          <Link
+            to={PUBLIC_ROUTES.demo}
+            className="inline-flex items-center justify-center text-drift-300 transition-colors hover:text-drift-200"
+          >
+            View the read-only demo
+          </Link>
+        </div>
       </div>
     </div>
   );

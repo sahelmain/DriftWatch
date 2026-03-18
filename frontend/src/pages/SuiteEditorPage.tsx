@@ -22,6 +22,7 @@ import {
 } from "@/api";
 import InlineBanner from "@/components/InlineBanner";
 import { suiteTemplates } from "@/lib/suiteTemplates";
+import { APP_ROUTES } from "@/lib/routes";
 import type {
   BannerState,
   SuiteDraft,
@@ -212,7 +213,7 @@ export default function SuiteEditorPage() {
       const savedSuite = isEditing && id
         ? await updateSuite(id, payload)
         : await createSuite(payload);
-      navigate("/suites", {
+      navigate(APP_ROUTES.suites, {
         replace: true,
         state: {
           banner: isEditing
@@ -278,7 +279,7 @@ export default function SuiteEditorPage() {
           <p className="mt-2 text-sm text-gray-400">
             The editor could not load this suite.
           </p>
-          <Link to="/suites" className="btn-secondary mt-6 inline-flex items-center gap-2">
+          <Link to={APP_ROUTES.suites} className="btn-secondary mt-6 inline-flex items-center gap-2">
             <ArrowLeft size={16} />
             Back to suites
           </Link>
@@ -292,7 +293,7 @@ export default function SuiteEditorPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <Link
-            to="/suites"
+            to={APP_ROUTES.suites}
             className="inline-flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-gray-200"
           >
             <ArrowLeft size={16} />
@@ -302,7 +303,7 @@ export default function SuiteEditorPage() {
             {isEditing ? "Edit Suite" : "New Suite"}
           </h1>
           <p className="text-sm text-gray-400">
-            YAML stays the source of truth. The editor validates supported web-runtime assertions before save.
+            YAML stays the source of truth. Define support-QA rules, validate them, and ship them with confidence.
           </p>
         </div>
         <button

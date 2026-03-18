@@ -19,6 +19,7 @@ import { getApiErrorMessage, getRun, triggerRun } from "@/api";
 import InlineBanner from "@/components/InlineBanner";
 import StatusBadge from "@/components/StatusBadge";
 import type { AssertionResult, BannerState, TestResult, TestRun } from "@/types";
+import { APP_ROUTES } from "@/lib/routes";
 
 const ACTIVE_RUN_STATUSES = new Set(["pending", "running"]);
 
@@ -263,7 +264,7 @@ export default function RunDetailPage() {
     setRerunning(true);
     try {
       const nextRun = await triggerRun(run.suite_id);
-      navigate(`/runs/${nextRun.id}`);
+      navigate(APP_ROUTES.run(nextRun.id));
     } catch (error) {
       setFetchError({
         variant: "error",
@@ -292,7 +293,7 @@ export default function RunDetailPage() {
         <div className="card p-16 text-center">
           <h3 className="text-lg font-medium text-gray-300">Run not found</h3>
           <Link
-            to="/runs"
+            to={APP_ROUTES.runs}
             className="mt-2 inline-block text-drift-400 hover:text-drift-300"
           >
             Back to runs
@@ -309,7 +310,7 @@ export default function RunDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          to="/runs"
+          to={APP_ROUTES.runs}
           className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-surface-800"
         >
           <ArrowLeft size={18} />

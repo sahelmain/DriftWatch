@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { deleteSuite, getApiErrorMessage, getSuites, triggerRun } from "@/api";
 import InlineBanner from "@/components/InlineBanner";
 import type { BannerState, Suite } from "@/types";
+import { APP_ROUTES } from "@/lib/routes";
 
 interface SuitesLocationState {
   banner?: BannerState;
@@ -98,7 +99,7 @@ export default function SuitesPage() {
     setRunningSuiteId(id);
     try {
       const run = await triggerRun(id);
-      navigate(`/runs/${run.id}`);
+      navigate(APP_ROUTES.run(run.id));
     } catch (error) {
       setBanner({
         variant: "error",
@@ -121,7 +122,7 @@ export default function SuitesPage() {
     setBannerActionLoading(true);
     try {
       const run = await triggerRun(banner.actionSuiteId);
-      navigate(`/runs/${run.id}`);
+      navigate(APP_ROUTES.run(run.id));
     } catch (error) {
       setBanner({
         variant: "error",
@@ -150,11 +151,11 @@ export default function SuitesPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Test Suites</h1>
           <p className="mt-1 text-gray-400">
-            Build, validate, and launch supported web-runtime suites.
+            Define the checks that make an AI answer safe, accurate, and production-ready.
           </p>
         </div>
         <button
-          onClick={() => navigate("/suites/new")}
+          onClick={() => navigate(APP_ROUTES.newSuite)}
           className="btn-primary inline-flex items-center gap-2"
         >
           <Plus size={16} />
@@ -187,7 +188,7 @@ export default function SuitesPage() {
                 <tr
                   key={suite.id}
                   className="cursor-pointer border-b border-surface-700/50 transition-colors hover:bg-surface-800/50"
-                  onClick={() => navigate(`/timeline?suite=${suite.id}`)}
+                  onClick={() => navigate(`${APP_ROUTES.timeline}?suite=${suite.id}`)}
                 >
                   <td className="table-cell">
                     <div className="flex items-center gap-3">
@@ -235,7 +236,7 @@ export default function SuitesPage() {
                         {runningSuiteId === suite.id ? "Starting" : "Run"}
                       </button>
                       <button
-                        onClick={() => navigate(`/suites/${suite.id}/edit`)}
+                        onClick={() => navigate(APP_ROUTES.editSuite(suite.id))}
                         className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-surface-700 hover:text-gray-200"
                         aria-label={`Edit ${suite.name}`}
                       >
@@ -265,10 +266,10 @@ export default function SuitesPage() {
           <FlaskConical className="mx-auto mb-4 text-gray-600" size={48} />
           <h3 className="text-lg font-medium text-gray-300">No test suites yet</h3>
           <p className="mx-auto mt-2 max-w-md text-gray-500">
-            Start with a supported template, validate the YAML, and launch your first run from the suite editor.
+            Start with the support-QA template, validate the YAML, and launch a run to see exactly where responses break your rules.
           </p>
           <button
-            onClick={() => navigate("/suites/new")}
+            onClick={() => navigate(APP_ROUTES.newSuite)}
             className="btn-primary mt-6 inline-flex items-center gap-2"
           >
             <Plus size={16} />

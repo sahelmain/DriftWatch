@@ -11,15 +11,16 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/AuthContext";
+import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/suites", icon: FlaskConical, label: "Suites" },
-  { to: "/runs", icon: Play, label: "Runs" },
-  { to: "/timeline", icon: Activity, label: "Timeline" },
-  { to: "/alerts", icon: Bell, label: "Alerts" },
-  { to: "/policies", icon: ShieldCheck, label: "Policies" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: APP_ROUTES.root, icon: LayoutDashboard, label: "Dashboard" },
+  { to: APP_ROUTES.suites, icon: FlaskConical, label: "Suites" },
+  { to: APP_ROUTES.runs, icon: Play, label: "Runs" },
+  { to: APP_ROUTES.timeline, icon: Activity, label: "Timeline" },
+  { to: APP_ROUTES.alerts, icon: Bell, label: "Alerts" },
+  { to: APP_ROUTES.policies, icon: ShieldCheck, label: "Policies" },
+  { to: APP_ROUTES.settings, icon: Settings, label: "Settings" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -29,14 +30,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   function handleLogout() {
     logout();
-    navigate("/login");
+    navigate(PUBLIC_ROUTES.login);
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="w-64 bg-surface-950 border-r border-surface-700 flex flex-col shrink-0">
         <div className="px-6 py-5 border-b border-surface-700">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to={APP_ROUTES.root} className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-drift-500 to-drift-700 flex items-center justify-center">
               <Activity className="w-4.5 h-4.5 text-white" size={18} />
             </div>
@@ -49,8 +50,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const active =
-              item.to === "/"
-                ? location.pathname === "/"
+              item.to === APP_ROUTES.root
+                ? location.pathname === APP_ROUTES.root
                 : location.pathname.startsWith(item.to);
             return (
               <Link

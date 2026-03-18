@@ -22,6 +22,7 @@ import { getSuites, getRuns, getAlerts } from "@/api";
 import type { Suite, TestRun, AlertConfig } from "@/types";
 import StatusBadge from "@/components/StatusBadge";
 import { getRunTimestamp } from "@/runTimestamps";
+import { APP_ROUTES } from "@/lib/routes";
 
 interface Stats {
   totalSuites: number;
@@ -147,7 +148,7 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
         <p className="text-gray-400 mt-1">
-          Overview of your LLM evaluation health
+          Monitor AI quality, reliability, and regressions across your latest evaluations.
         </p>
       </div>
 
@@ -221,7 +222,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between p-6 pb-0">
           <h2 className="text-lg font-semibold text-white">Recent Runs</h2>
           <Link
-            to="/runs"
+            to={APP_ROUTES.runs}
             className="text-sm text-drift-400 hover:text-drift-300 flex items-center gap-1"
           >
             View all <ArrowRight size={14} />
@@ -251,7 +252,7 @@ export default function DashboardPage() {
                     >
                       <td className="table-cell font-medium text-white">
                         <Link
-                          to={`/runs/${run.id}`}
+                          to={APP_ROUTES.run(run.id)}
                           className="hover:text-drift-400"
                         >
                           {run.suite_name || run.suite_id}

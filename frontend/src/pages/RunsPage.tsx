@@ -12,6 +12,7 @@ import { getApiErrorMessage, getRuns, getSuites } from "@/api";
 import InlineBanner from "@/components/InlineBanner";
 import StatusBadge from "@/components/StatusBadge";
 import type { BannerState, PaginatedResponse, Suite, TestRun } from "@/types";
+import { APP_ROUTES } from "@/lib/routes";
 
 export default function RunsPage() {
   const [runs, setRuns] = useState<TestRun[]>([]);
@@ -68,7 +69,7 @@ export default function RunsPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Test Runs</h1>
         <p className="mt-1 text-gray-400">
-          Browse and filter all evaluation runs
+          Review every evaluation, filter failures, and inspect where AI responses violated your rules.
         </p>
       </div>
 
@@ -137,7 +138,7 @@ export default function RunsPage() {
                 >
                   <td className="table-cell">
                     <Link
-                      to={`/runs/${run.id}`}
+                      to={APP_ROUTES.run(run.id)}
                       className="font-mono text-sm text-drift-400 hover:text-drift-300"
                     >
                       {run.id.slice(0, 8)}

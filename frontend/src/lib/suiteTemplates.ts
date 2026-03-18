@@ -7,53 +7,56 @@ export interface SuiteTemplate {
 
 export const suiteTemplates: SuiteTemplate[] = [
   {
-    id: "basic",
-    label: "Basic checks",
-    description: "Starter template for contains and max-length assertions.",
+    id: "support-qa",
+    label: "Support QA",
+    description:
+      "Check that an AI support reply mentions policy, avoids risky promises, and stays concise.",
     yaml: `tests:
-  - name: greeting-check
-    prompt: "Say hello to the DriftWatch team in one sentence."
+  - name: refund-reply-guardrails
+    prompt: "You are a support assistant. Reply to a customer whose package has been delayed for 12 days and who is asking for a refund. Mention the 30-day refund policy and ask for their order number."
     model: gemini-2.5-flash-lite
     assertions:
       - type: contains
-        value: ["hello", "DriftWatch"]
+        value: ["30-day refund policy", "order number"]
+      - type: not_contains
+        value: ["guarantee delivery tomorrow", "lifetime refund"]
       - type: max_length
-        value: 140
+        value: 320
 `,
   },
   {
     id: "json",
     label: "JSON schema",
-    description: "Validate structured output against a JSON schema.",
+    description: "Validate structured output for a support triage workflow.",
     yaml: `tests:
-  - name: structured-profile
-    prompt: "Return a JSON object with keys name, role, and location for Ada Lovelace."
+  - name: support-ticket-structuring
+    prompt: "Convert this ticket into JSON with keys issue_type, customer_sentiment, and next_action: 'My order never arrived and I want a refund as soon as possible.'"
     model: gemini-2.5-flash-lite
     assertions:
       - type: json_schema
         schema:
           type: object
-          required: ["name", "role", "location"]
+          required: ["issue_type", "customer_sentiment", "next_action"]
           properties:
-            name:
+            issue_type:
               type: string
-            role:
+            customer_sentiment:
               type: string
-            location:
+            next_action:
               type: string
 `,
   },
   {
     id: "latency",
     label: "Latency checks",
-    description: "Track response speed for a production prompt.",
+    description: "Track response speed for a production support workflow.",
     yaml: `tests:
-  - name: concise-summary
-    prompt: "Summarize the latest support ticket in under 50 words."
+  - name: shipping-delay-reply
+    prompt: "Write a calm, helpful reply to a customer whose shipment is delayed and who wants an update."
     model: gemini-2.5-flash-lite
     assertions:
       - type: max_length
-        value: 220
+        value: 260
       - type: latency
         threshold_ms: 1500
 `,

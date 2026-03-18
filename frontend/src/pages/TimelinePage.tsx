@@ -19,6 +19,7 @@ import { getSuites, getDriftTimeline, getRuns } from "@/api";
 import type { Suite, DriftScore, TestRun } from "@/types";
 import StatusBadge from "@/components/StatusBadge";
 import { getRunTimestamp } from "@/runTimestamps";
+import { APP_ROUTES } from "@/lib/routes";
 
 const DRIFT_THRESHOLD = 0.3;
 
@@ -78,9 +79,9 @@ export default function TimelinePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Drift Timeline</h1>
+        <h1 className="text-2xl font-bold text-white">Quality Timeline</h1>
         <p className="text-gray-400 mt-1">
-          Track evaluation quality drift over time
+          Track how pass rate and quality shift across repeated runs of the same suite.
         </p>
       </div>
 
@@ -287,7 +288,7 @@ export default function TimelinePage() {
                       >
                         <td className="table-cell">
                           <Link
-                            to={`/runs/${run.id}`}
+                            to={APP_ROUTES.run(run.id)}
                             className="font-mono text-drift-400 hover:text-drift-300 text-sm"
                           >
                             {run.id.slice(0, 8)}
