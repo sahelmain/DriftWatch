@@ -45,8 +45,9 @@ curl http://localhost:8000/api/health
 curl https://<your-koyeb-host>/api/health
 
 # 5. Confirm VITE_API_URL in Vercel points to the Koyeb /api base URL and redeploy the frontend if needed.
-# 6. Verify the public frontend can reach the backend.
-curl https://<your-vercel-host>/api/health
+# 6. Verify the public frontend can reach the backend through VITE_API_URL.
+#    The Vercel static deployment does not proxy /api/* to Koyeb.
+open https://<your-vercel-host>
 
 # 7. Create or edit a suite from the guided editor and confirm unsupported assertions and disallowed models are blocked before save.
 # 8. Trigger a manual run and verify it appears immediately as Pending in the UI/API.
@@ -62,6 +63,7 @@ curl https://<your-vercel-host>/api/health
 - Set `DEMO_ALLOWED_MODELS_JSON=["gemini-2.5-flash-lite"]`, `DEMO_MAX_TESTS_PER_SUITE=3`, and `DEMO_MAX_RUNS_PER_USER_PER_DAY=10`.
 - Set `VITE_API_URL=https://<your-koyeb-host>/api` in Vercel.
 - Keep `VITE_ENABLE_DEMO_AUTO_LOGIN=false` in the Vercel production environment.
+- Use the public production alias for demo sharing. Generated preview deployment URLs may remain protected by Vercel Authentication.
 - The demo path does not use Redis, a background worker, or a cron service.
 
 ### Render + Vercel (Paid Full Stack)

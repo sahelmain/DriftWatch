@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.5
 
+    ENABLE_OTEL: bool = False
     OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4317"
 
     CORS_ORIGINS: list[str] = [

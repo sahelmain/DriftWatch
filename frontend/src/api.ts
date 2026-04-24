@@ -234,7 +234,7 @@ export async function deleteAlert(id: string): Promise<void> {
 }
 
 export async function getAlertEvents(): Promise<AlertEvent[]> {
-  return [];
+  return fetchApi<AlertEvent[]>("/alert-events");
 }
 
 export async function testWebhook(data: {

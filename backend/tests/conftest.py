@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 
-import pytest
 import pytest_asyncio
 from app.database import Base, get_db
 from app.main import app
@@ -22,11 +20,10 @@ _engine = create_async_engine(
 _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def dispose_test_engine():
+    yield
+    await _engine.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)

@@ -10,6 +10,7 @@ import pytest
 from app.config import settings
 from app.database import get_db
 from app.main import app
+from app.models import AlertEvent as AlertEventModel
 from app.models import TestRun as TestRunModel
 from app.models import TestSuite as TestSuiteModel
 from httpx import AsyncClient
@@ -28,6 +29,19 @@ tests:
       - type: contains
         value: ["hello"]
 """
+
+
+async def _register_headers(client: AsyncClient, email: str, org_name: str) -> dict[str, str]:
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "password": "testpass123",
+            "org_name": org_name,
+        },
+    )
+    assert res.status_code == 201
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
 
 @asynccontextmanager
@@ -634,6 +648,155 @@ class TestPolicies:
 
         del_res = await auth_client.delete(f"/api/policies/{policy_id}")
         assert del_res.status_code == 204
+
+
+class TestTenantIsolation:
+    async def test_suite_run_and_ci_access_are_scoped_to_user_org(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "ENABLE_INLINE_RUNS", False)
+        monkeypatch.setattr("app.services.runs.RunService.dispatch_run", lambda self, run_id: None)
+
+        org_a = await _register_headers(client, "tenant-a@test.io", "Tenant A")
+        org_b = await _register_headers(client, "tenant-b@test.io", "Tenant B")
+
+        suite_res = await client.post(
+            "/api/suites",
+            headers=org_a,
+            json={"name": "Tenant A Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        assert suite_res.status_code == 201
+        suite_id = suite_res.json()["id"]
+
+        assert (await client.get(f"/api/suites/{suite_id}", headers=org_b)).status_code == 404
+        assert (
+            await client.put(
+                f"/api/suites/{suite_id}",
+                headers=org_b,
+                json={"name": "Tenant B Rename"},
+            )
+        ).status_code == 404
+        assert (await client.delete(f"/api/suites/{suite_id}", headers=org_b)).status_code == 404
+        assert (await client.post(f"/api/suites/{suite_id}/run", headers=org_b)).status_code == 404
+
+        run_res = await client.post(f"/api/suites/{suite_id}/run", headers=org_a)
+        assert run_res.status_code == 201
+        run_id = run_res.json()["id"]
+        assert (await client.get(f"/api/runs/{run_id}", headers=org_b)).status_code == 404
+
+        async with override_session() as session:
+            run = await session.get(TestRunModel, uuid.UUID(run_id))
+            assert run is not None
+            run.status = "completed"
+            run.started_at = datetime.now(UTC) - timedelta(seconds=1)
+            run.completed_at = datetime.now(UTC)
+            run.pass_rate = 100.0
+            run.total_tests = 1
+            run.passed_tests = 1
+
+        ci_res = await client.post(
+            "/api/ci/check",
+            headers=org_b,
+            json={"suite_id": suite_id, "commit_sha": "abc123"},
+        )
+        assert ci_res.status_code == 200
+        ci_body = ci_res.json()
+        assert ci_body["passed"] is False
+        assert ci_body["run_id"] is None
+        assert ci_body["message"] == "No completed runs found"
+
+    async def test_alert_policy_dataset_and_event_access_are_scoped_to_user_org(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "ENABLE_INLINE_RUNS", False)
+        monkeypatch.setattr("app.services.runs.RunService.dispatch_run", lambda self, run_id: None)
+
+        org_a = await _register_headers(client, "alerts-a@test.io", "Alerts A")
+        org_b = await _register_headers(client, "alerts-b@test.io", "Alerts B")
+
+        suite_res = await client.post(
+            "/api/suites",
+            headers=org_a,
+            json={"name": "Alert Suite", "yaml_content": VALID_SUITE_YAML},
+        )
+        suite_id = suite_res.json()["id"]
+        run_res = await client.post(f"/api/suites/{suite_id}/run", headers=org_a)
+        run_id = run_res.json()["id"]
+
+        alert_res = await client.post(
+            "/api/alerts",
+            headers=org_a,
+            json={
+                "channel": "slack",
+                "destination": "https://hooks.slack.com/tenant",
+                "threshold_metric": "pass_rate",
+                "threshold_value": 90,
+            },
+        )
+        assert alert_res.status_code == 201
+        alert_id = alert_res.json()["id"]
+
+        policy_res = await client.post(
+            "/api/policies",
+            headers=org_a,
+            json={
+                "name": "Tenant Policy",
+                "metric": "pass_rate",
+                "operator": "lt",
+                "threshold": 90,
+                "action": "block",
+            },
+        )
+        assert policy_res.status_code == 201
+        policy_id = policy_res.json()["id"]
+
+        dataset_res = await client.post(
+            "/api/datasets",
+            headers=org_a,
+            json={"name": "Tenant Dataset", "content": [{"prompt": "hello"}], "row_count": 1},
+        )
+        assert dataset_res.status_code == 201
+        dataset_id = dataset_res.json()["id"]
+
+        assert (
+            await client.put(
+                f"/api/alerts/{alert_id}",
+                headers=org_b,
+                json={"threshold_value": 50},
+            )
+        ).status_code == 404
+        assert (await client.delete(f"/api/alerts/{alert_id}", headers=org_b)).status_code == 404
+        assert (
+            await client.put(
+                f"/api/policies/{policy_id}",
+                headers=org_b,
+                json={"threshold": 50},
+            )
+        ).status_code == 404
+        assert (await client.delete(f"/api/policies/{policy_id}", headers=org_b)).status_code == 404
+        assert (await client.get(f"/api/datasets/{dataset_id}", headers=org_b)).status_code == 404
+
+        async with override_session() as session:
+            session.add(
+                AlertEventModel(
+                    alert_config_id=uuid.UUID(alert_id),
+                    run_id=uuid.UUID(run_id),
+                    channel="slack",
+                    message="tenant alert",
+                    status="sent",
+                )
+            )
+
+        org_a_events = await client.get("/api/alert-events", headers=org_a)
+        org_b_events = await client.get("/api/alert-events", headers=org_b)
+        assert org_a_events.status_code == 200
+        assert org_b_events.status_code == 200
+        assert len(org_a_events.json()) == 1
+        assert org_b_events.json() == []
 
 
 class TestSettings:

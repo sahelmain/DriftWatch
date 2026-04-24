@@ -89,7 +89,7 @@ export interface AlertConfig {
   destination: string;
   threshold_metric: string;
   threshold_value: number;
-  suite_id?: string;
+  suite_id: string | null;
   org_id: string;
   enabled: boolean;
   created_at: string;
@@ -97,20 +97,19 @@ export interface AlertConfig {
 
 export interface AlertEvent {
   id: string;
-  alert_id: string;
+  alert_config_id: string;
+  run_id: string;
   channel: string;
-  destination: string;
-  metric_value: number;
-  threshold: number;
+  message: string;
   status: "sent" | "failed";
-  created_at: string;
+  sent_at: string;
 }
 
 export interface Policy {
   id: string;
   name: string;
   metric: string;
-  operator: "lt" | "gt" | "eq" | "lte" | "gte";
+  operator: "lt" | "le" | "gt" | "ge" | "eq" | "ne";
   threshold: number;
   action: "block" | "warn" | "notify";
   enabled: boolean;

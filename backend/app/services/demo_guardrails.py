@@ -46,17 +46,11 @@ def is_demo_model_allowed(model: str) -> bool:
 
 
 def disallowed_model_message(model: str) -> str:
-    return (
-        f"Model '{model}' is not available in the public demo. "
-        f"Allowed models: {describe_demo_allowed_models()}."
-    )
+    return f"Model '{model}' is not available in the public demo. Allowed models: {describe_demo_allowed_models()}."
 
 
 def too_many_tests_message(count: int) -> str:
-    return (
-        f"The public demo supports up to {settings.DEMO_MAX_TESTS_PER_SUITE} tests per suite. "
-        f"Received {count}."
-    )
+    return f"The public demo supports up to {settings.DEMO_MAX_TESTS_PER_SUITE} tests per suite. Received {count}."
 
 
 def build_run_metadata(user_id: uuid.UUID) -> dict[str, str]:
@@ -73,13 +67,17 @@ async def count_recent_demo_runs_for_user(
 ) -> int:
     cutoff = datetime.now(UTC) - timedelta(days=1)
     rows = (
-        await db.execute(
-            select(TestRun).where(
-                TestRun.org_id == org_id,
-                TestRun.trigger == "manual",
+        (
+            await db.execute(
+                select(TestRun).where(
+                    TestRun.org_id == org_id,
+                    TestRun.trigger == "manual",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     count = 0
     for run in rows:

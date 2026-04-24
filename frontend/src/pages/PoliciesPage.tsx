@@ -18,18 +18,15 @@ import StatusBadge from "@/components/StatusBadge";
 
 const metricOptions = [
   { value: "pass_rate", label: "Pass Rate" },
-  { value: "drift_score", label: "Drift Score" },
-  { value: "latency_p95", label: "Latency (p95)" },
-  { value: "failure_count", label: "Failure Count" },
-  { value: "cost_per_run", label: "Cost per Run" },
 ];
 
 const operatorOptions = [
   { value: "lt", label: "< (less than)" },
-  { value: "lte", label: "<= (less or equal)" },
+  { value: "le", label: "<= (less or equal)" },
   { value: "gt", label: "> (greater than)" },
-  { value: "gte", label: ">= (greater or equal)" },
+  { value: "ge", label: ">= (greater or equal)" },
   { value: "eq", label: "= (equal)" },
+  { value: "ne", label: "!= (not equal)" },
 ];
 
 const actionOptions = [

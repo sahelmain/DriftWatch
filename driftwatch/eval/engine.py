@@ -44,6 +44,7 @@ class SuiteRunResult:
     def pass_rate(self) -> float:
         return self.passed_tests / self.total_tests if self.total_tests else 0.0
 
+
 def evaluate_assertions(
     output: str,
     assertions: list[AssertionSpec],

@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import json
 import math
 import re
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
 from prometheus_client import generate_latest
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +14,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import (
     AlertConfig,
+    AlertEvent,
     AuditLog,
     Dataset,
     Organization,
@@ -29,6 +28,7 @@ from app.schemas import (
     AlertConfigCreate,
     AlertConfigResponse,
     AlertConfigUpdate,
+    AlertEventResponse,
     ApiKeyCreate,
     ApiKeyCreated,
     ApiKeyResponse,
@@ -198,6 +198,27 @@ def _serialize_timeline(runs: list[TestRun]) -> list[ClientDriftPointResponse]:
 def _suite_validation_error_response(validation: SuiteValidationResponse) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=validation.model_dump(mode="json"))
 
+
+def _ensure_same_org(org_id: uuid.UUID, user: User, detail: str = "Resource not found") -> None:
+    if org_id != user.org_id:
+        raise HTTPException(status_code=404, detail=detail)
+
+
+async def _get_active_suite_or_404(db: AsyncSession, suite_id: uuid.UUID, org_id: uuid.UUID) -> TestSuite:
+    suite = (
+        await db.execute(
+            select(TestSuite).where(
+                TestSuite.id == suite_id,
+                TestSuite.org_id == org_id,
+                TestSuite.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if suite is None:
+        raise HTTPException(status_code=404, detail="Suite not found")
+    return suite
+
+
 def _apply_client_run_status_filter(query, run_status: str | None):
     if run_status is None:
         return query
@@ -231,7 +252,7 @@ def _apply_client_run_status_filter(query, run_status: str | None):
 
 @router.post("/auth/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 @demo_limit("5/minute", error_message="Too many registration attempts. Try again later.")
-async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, body: RegisterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     exists = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -257,7 +278,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
 @router.post("/auth/login", response_model=Token)
 @demo_limit("10/minute", error_message="Too many login attempts. Try again later.")
-async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, body: LoginRequest = Body(...), db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -289,6 +310,7 @@ async def create_org(body: OrgCreate, user: User = Depends(require_role("admin")
 
 @router.get("/orgs/{org_id}", response_model=OrgResponse)
 async def get_org(org_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    _ensure_same_org(org_id, user, "Organization not found")
     org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -302,6 +324,7 @@ async def add_member(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_same_org(org_id, user, "Organization not found")
     member = User(
         email=body.email,
         password_hash=hash_password(body.password),
@@ -321,6 +344,7 @@ async def list_api_keys(
 ):
     from app.models import ApiKey
 
+    _ensure_same_org(org_id, user, "Organization not found")
     rows = (await db.execute(select(ApiKey).where(ApiKey.org_id == org_id))).scalars().all()
     return rows
 
@@ -332,6 +356,7 @@ async def create_api_key_endpoint(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_same_org(org_id, user, "Organization not found")
     api_key, raw_key = await create_api_key(db, org_id, body.name, body.scopes, body.expires_at)
     return ApiKeyCreated(
         id=api_key.id,
@@ -355,6 +380,7 @@ async def revoke_api_key(
 ):
     from app.models import ApiKey
 
+    _ensure_same_org(org_id, user, "Organization not found")
     key = (await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == org_id))).scalar_one_or_none()
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -388,7 +414,7 @@ async def list_suites(
 @demo_limit("20/minute", error_message="Too many validation requests. Try again later.")
 async def validate_suite_endpoint(
     request: Request,
-    body: SuiteValidationRequest,
+    body: SuiteValidationRequest = Body(...),
     user: User = Depends(get_current_user),
 ):
     return validate_suite_draft(
@@ -430,9 +456,7 @@ async def create_suite(
 
 @router.get("/suites/{suite_id}", response_model=TestSuiteResponse)
 async def get_suite(suite_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    suite = (await db.execute(select(TestSuite).where(TestSuite.id == suite_id))).scalar_one_or_none()
-    if suite is None:
-        raise HTTPException(status_code=404, detail="Suite not found")
+    suite = await _get_active_suite_or_404(db, suite_id, user.org_id)
     return suite
 
 
@@ -443,9 +467,7 @@ async def update_suite(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    suite = (await db.execute(select(TestSuite).where(TestSuite.id == suite_id))).scalar_one_or_none()
-    if suite is None:
-        raise HTTPException(status_code=404, detail="Suite not found")
+    suite = await _get_active_suite_or_404(db, suite_id, user.org_id)
 
     merged_name = body.name if body.name is not None else suite.name
     merged_yaml = body.yaml_content if body.yaml_content is not None else suite.yaml_content
@@ -467,9 +489,7 @@ async def update_suite(
 
 @router.delete("/suites/{suite_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_suite(suite_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    suite = (await db.execute(select(TestSuite).where(TestSuite.id == suite_id))).scalar_one_or_none()
-    if suite is None:
-        raise HTTPException(status_code=404, detail="Suite not found")
+    suite = await _get_active_suite_or_404(db, suite_id, user.org_id)
     suite.is_active = False
     await db.flush()
 
@@ -488,6 +508,8 @@ async def trigger_run(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _get_active_suite_or_404(db, suite_id, user.org_id)
+
     billing = BillingService(db)
     if not await billing.check_quota(user.org_id, "runs"):
         raise HTTPException(status_code=402, detail="Run limit reached for your plan")
@@ -534,14 +556,17 @@ async def list_runs(
 
     total = (await db.execute(count_query)).scalar() or 0
     rows = (
-        await db.execute(
-            base_query
-            .options(selectinload(TestRun.suite))
-            .order_by(TestRun.started_at.desc())
-            .offset((page - 1) * limit)
-            .limit(limit)
+        (
+            await db.execute(
+                base_query.options(selectinload(TestRun.suite))
+                .order_by(TestRun.started_at.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     items = [_serialize_run(run) for run in rows]
     return _paginate(items, total, page, limit)
 
@@ -549,7 +574,7 @@ async def list_runs(
 @router.get("/runs/{run_id}", response_model=ClientTestRunDetailResponse)
 async def get_run(run_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     svc = RunService(db)
-    run = await svc.get_run(run_id)
+    run = await svc.get_run(run_id, org_id=user.org_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return _serialize_run(run, include_results=True)
@@ -579,6 +604,9 @@ async def create_alert(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if body.suite_id is not None:
+        await _get_active_suite_or_404(db, body.suite_id, user.org_id)
+
     cfg = AlertConfig(
         suite_id=body.suite_id,
         org_id=user.org_id,
@@ -600,10 +628,15 @@ async def update_alert(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cfg = (await db.execute(select(AlertConfig).where(AlertConfig.id == alert_id))).scalar_one_or_none()
+    cfg = (
+        await db.execute(select(AlertConfig).where(AlertConfig.id == alert_id, AlertConfig.org_id == user.org_id))
+    ).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=404, detail="Alert config not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("suite_id") is not None:
+        await _get_active_suite_or_404(db, updates["suite_id"], user.org_id)
+    for field, value in updates.items():
         setattr(cfg, field, value)
     await db.flush()
     return cfg
@@ -611,10 +644,34 @@ async def update_alert(
 
 @router.delete("/alerts/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_alert(alert_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    cfg = (await db.execute(select(AlertConfig).where(AlertConfig.id == alert_id))).scalar_one_or_none()
+    cfg = (
+        await db.execute(select(AlertConfig).where(AlertConfig.id == alert_id, AlertConfig.org_id == user.org_id))
+    ).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=404, detail="Alert config not found")
     await db.delete(cfg)
+
+
+@router.get("/alert-events", response_model=list[AlertEventResponse])
+async def list_alert_events(
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (
+        (
+            await db.execute(
+                select(AlertEvent)
+                .join(AlertConfig, AlertEvent.alert_config_id == AlertConfig.id)
+                .where(AlertConfig.org_id == user.org_id)
+                .order_by(AlertEvent.sent_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return rows
 
 
 @router.post("/webhooks/test", status_code=status.HTTP_200_OK)
@@ -653,6 +710,9 @@ async def list_policies(user: User = Depends(get_current_user), db: AsyncSession
 
 @router.post("/policies", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED)
 async def create_policy(body: PolicyCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    if body.suite_id is not None:
+        await _get_active_suite_or_404(db, body.suite_id, user.org_id)
+
     p = Policy(
         org_id=user.org_id,
         suite_id=body.suite_id,
@@ -675,10 +735,15 @@ async def update_policy(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    p = (await db.execute(select(Policy).where(Policy.id == policy_id))).scalar_one_or_none()
+    p = (
+        await db.execute(select(Policy).where(Policy.id == policy_id, Policy.org_id == user.org_id))
+    ).scalar_one_or_none()
     if p is None:
         raise HTTPException(status_code=404, detail="Policy not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("suite_id") is not None:
+        await _get_active_suite_or_404(db, updates["suite_id"], user.org_id)
+    for field, value in updates.items():
         setattr(p, field, value)
     await db.flush()
     return p
@@ -688,7 +753,9 @@ async def update_policy(
 async def delete_policy(
     policy_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    p = (await db.execute(select(Policy).where(Policy.id == policy_id))).scalar_one_or_none()
+    p = (
+        await db.execute(select(Policy).where(Policy.id == policy_id, Policy.org_id == user.org_id))
+    ).scalar_one_or_none()
     if p is None:
         raise HTTPException(status_code=404, detail="Policy not found")
     await db.delete(p)
@@ -727,7 +794,9 @@ async def get_dataset(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    ds = (await db.execute(select(Dataset).where(Dataset.id == dataset_id))).scalar_one_or_none()
+    ds = (
+        await db.execute(select(Dataset).where(Dataset.id == dataset_id, Dataset.org_id == user.org_id))
+    ).scalar_one_or_none()
     if ds is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return ds
@@ -743,7 +812,7 @@ async def ci_check(body: CICheckRequest, user: User = Depends(get_current_user),
     latest_run = (
         await db.execute(
             select(TestRun)
-            .where(TestRun.suite_id == body.suite_id, TestRun.status == "completed")
+            .where(TestRun.suite_id == body.suite_id, TestRun.org_id == user.org_id, TestRun.status == "completed")
             .order_by(TestRun.completed_at.desc())
             .limit(1)
         )

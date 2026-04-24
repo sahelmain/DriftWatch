@@ -321,20 +321,25 @@ class ClientDriftPointResponse(BaseModel):
 # Alert Config
 # ---------------------------------------------------------------------------
 
+ALERT_METRIC_PATTERN = r"^(pass_rate|total_tests)$"
+POLICY_METRIC_PATTERN = r"^pass_rate$"
+POLICY_OPERATOR_PATTERN = r"^(lt|le|gt|ge|eq|ne)$"
+
 
 class AlertConfigCreate(BaseModel):
     suite_id: uuid.UUID | None = None
     channel: str = Field(..., pattern=r"^(slack|email|pagerduty|jira)$")
     destination: str = Field(..., min_length=1)
-    threshold_metric: str
+    threshold_metric: str = Field(..., pattern=ALERT_METRIC_PATTERN)
     threshold_value: float
     enabled: bool = True
 
 
 class AlertConfigUpdate(BaseModel):
-    channel: str | None = None
-    destination: str | None = None
-    threshold_metric: str | None = None
+    suite_id: uuid.UUID | None = None
+    channel: str | None = Field(default=None, pattern=r"^(slack|email|pagerduty|jira)$")
+    destination: str | None = Field(default=None, min_length=1)
+    threshold_metric: str | None = Field(default=None, pattern=ALERT_METRIC_PATTERN)
     threshold_value: float | None = None
     enabled: bool | None = None
 
@@ -386,19 +391,20 @@ class AuditLogResponse(_OrmBase):
 class PolicyCreate(BaseModel):
     suite_id: uuid.UUID | None = None
     name: str = Field(..., min_length=1, max_length=255)
-    metric: str
-    operator: str = Field(..., pattern=r"^(lt|le|gt|ge|eq|ne)$")
+    metric: str = Field(..., pattern=POLICY_METRIC_PATTERN)
+    operator: str = Field(..., pattern=POLICY_OPERATOR_PATTERN)
     threshold: float
     action: str = Field("notify", pattern=r"^(block|warn|notify)$")
     enabled: bool = True
 
 
 class PolicyUpdate(BaseModel):
-    name: str | None = None
-    metric: str | None = None
-    operator: str | None = None
+    suite_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    metric: str | None = Field(default=None, pattern=POLICY_METRIC_PATTERN)
+    operator: str | None = Field(default=None, pattern=POLICY_OPERATOR_PATTERN)
     threshold: float | None = None
-    action: str | None = None
+    action: str | None = Field(default=None, pattern=r"^(block|warn|notify)$")
     enabled: bool | None = None
 
 

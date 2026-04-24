@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -13,6 +14,8 @@ from app.models import (
     TestResult,
     TestRun,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RunService:
@@ -37,11 +40,12 @@ class RunService:
         await self.db.flush()
         return run
 
-    async def get_run(self, run_id: uuid.UUID) -> TestRun | None:
+    async def get_run(self, run_id: uuid.UUID, org_id: uuid.UUID | None = None) -> TestRun | None:
+        query = select(TestRun).where(TestRun.id == run_id)
+        if org_id is not None:
+            query = query.where(TestRun.org_id == org_id)
         result = await self.db.execute(
-            select(TestRun)
-            .where(TestRun.id == run_id)
-            .options(
+            query.options(
                 selectinload(TestRun.suite),
                 selectinload(TestRun.results).selectinload(TestResult.assertion_results),
             )
@@ -77,17 +81,21 @@ class RunService:
         suite_id: uuid.UUID,
     ) -> list[TestRun]:
         rows = (
-            await self.db.execute(
-                select(TestRun)
-                .where(
-                    TestRun.org_id == org_id,
-                    TestRun.suite_id == suite_id,
-                    TestRun.completed_at.isnot(None),
-                    TestRun.pass_rate.isnot(None),
+            (
+                await self.db.execute(
+                    select(TestRun)
+                    .where(
+                        TestRun.org_id == org_id,
+                        TestRun.suite_id == suite_id,
+                        TestRun.completed_at.isnot(None),
+                        TestRun.pass_rate.isnot(None),
+                    )
+                    .order_by(TestRun.completed_at.asc())
                 )
-                .order_by(TestRun.completed_at.asc())
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return list(rows)
 
     async def compute_drift(self, suite_id: uuid.UUID) -> list[DriftScore]:
@@ -180,4 +188,4 @@ class RunService:
 
             execute_run.apply_async(args=[str(run_id)], ignore_result=True)
         except Exception:
-            pass
+            logger.exception("Failed to dispatch run %s via Celery", run_id)

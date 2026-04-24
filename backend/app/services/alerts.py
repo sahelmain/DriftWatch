@@ -37,15 +37,13 @@ class AlertService:
 
         events: list[AlertEvent] = []
         for cfg in configs:
-            triggered = self._evaluate(cfg, run)
-            if not triggered:
+            metric_value = self._metric_value(cfg, run)
+            if metric_value is None or metric_value >= cfg.threshold_value:
                 continue
 
             message = (
-                f"[DriftWatch] Alert: {cfg.threshold_metric} "
-                f"{'below' if run.pass_rate is not None and run.pass_rate < cfg.threshold_value else 'triggered'} "
-                f"threshold {cfg.threshold_value} — "
-                f"Suite run {run.id} pass_rate={run.pass_rate}"
+                f"[DriftWatch] Alert: {cfg.threshold_metric}={metric_value} "
+                f"below threshold {cfg.threshold_value} — Suite run {run.id}"
             )
 
             sent = await self._dispatch(cfg.channel, cfg.destination, message)
@@ -63,16 +61,13 @@ class AlertService:
         return events
 
     @staticmethod
-    def _evaluate(cfg: AlertConfig, run: TestRun) -> bool:
+    def _metric_value(cfg: AlertConfig, run: TestRun) -> float | None:
         metric_value: float | None = None
         if cfg.threshold_metric == "pass_rate":
             metric_value = run.pass_rate
         elif cfg.threshold_metric == "total_tests":
             metric_value = float(run.total_tests) if run.total_tests is not None else None
-
-        if metric_value is None:
-            return False
-        return metric_value < cfg.threshold_value
+        return metric_value
 
     async def _dispatch(self, channel: str, destination: str, message: str) -> bool:
         dispatch_map = {

@@ -19,8 +19,9 @@ import {
   deleteAlert,
   testWebhook,
   getSuites,
+  getAlertEvents,
 } from "@/api";
-import type { AlertConfig, Suite } from "@/types";
+import type { AlertConfig, AlertEvent, Suite } from "@/types";
 
 const channelIcons: Record<string, typeof Bell> = {
   slack: MessageSquare,
@@ -38,13 +39,12 @@ const channelOptions = [
 
 const metricOptions = [
   { value: "pass_rate", label: "Pass Rate" },
-  { value: "drift_score", label: "Drift Score" },
-  { value: "latency_p95", label: "Latency (p95)" },
-  { value: "failure_count", label: "Failure Count" },
+  { value: "total_tests", label: "Total Tests" },
 ];
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertConfig[]>([]);
+  const [events, setEvents] = useState<AlertEvent[]>([]);
   const [suites, setSuites] = useState<Suite[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -63,10 +63,12 @@ export default function AlertsPage() {
     Promise.all([
       getAlerts().catch(() => []),
       getSuites().catch(() => []),
+      getAlertEvents().catch(() => []),
     ])
-      .then(([a, s]) => {
+      .then(([a, s, e]) => {
         setAlerts(a);
         setSuites(s);
+        setEvents(e);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -102,7 +104,7 @@ export default function AlertsPage() {
         destination: formDest,
         threshold_metric: formMetric,
         threshold_value: parseFloat(formThreshold),
-        suite_id: formSuiteId || undefined,
+        suite_id: formSuiteId || null,
         enabled: formEnabled,
       };
       if (editing) {
@@ -287,6 +289,53 @@ export default function AlertsPage() {
             <Plus size={16} />
             Create Alert
           </button>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="border-b border-surface-700 px-5 py-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">
+              Recent alert events
+            </h2>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-surface-700">
+                <th className="table-header">Channel</th>
+                <th className="table-header">Message</th>
+                <th className="table-header">Status</th>
+                <th className="table-header">Sent</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr
+                  key={event.id}
+                  className="border-b border-surface-700/50 hover:bg-surface-800/50 transition-colors"
+                >
+                  <td className="table-cell capitalize">{event.channel}</td>
+                  <td className="table-cell max-w-xl truncate text-gray-300">
+                    {event.message}
+                  </td>
+                  <td className="table-cell">
+                    <span
+                      className={
+                        event.status === "sent"
+                          ? "text-emerald-300"
+                          : "text-rose-300"
+                      }
+                    >
+                      {event.status}
+                    </span>
+                  </td>
+                  <td className="table-cell text-gray-400">
+                    {new Date(event.sent_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

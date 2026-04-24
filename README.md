@@ -173,7 +173,7 @@ DriftWatch supports two deployment shapes.
 1. Confirm the GitHub CI workflow is green before merging to `main`.
 2. For the public demo path, verify `GET https://<your-koyeb-host>/api/health` returns JSON and the database check is `ok`.
 3. Set `VITE_API_URL` in Vercel to the live Koyeb host and redeploy the frontend.
-4. Check `GET https://<your-vercel-host>/api/health` and confirm the frontend can reach the backend.
+4. Open the Vercel production URL and confirm the frontend can reach the backend through `VITE_API_URL`; `/api/*` is not proxied by Vercel in the static demo deployment.
 5. Create or edit a suite from the guided editor and confirm unsupported assertions or disallowed models are blocked before save.
 6. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
 7. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with Gemini output.

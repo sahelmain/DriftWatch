@@ -84,11 +84,7 @@ def _validate_yaml_content(raw: str, *, suite_name: str | None) -> tuple[SuiteSu
 
     for test in spec.tests:
         unsupported = sorted(
-            {
-                assertion.type
-                for assertion in test.assertions
-                if assertion.type in UNSUPPORTED_WEB_ASSERTIONS
-            }
+            {assertion.type for assertion in test.assertions if assertion.type in UNSUPPORTED_WEB_ASSERTIONS}
         )
         if unsupported:
             issues.append(

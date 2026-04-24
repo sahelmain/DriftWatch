@@ -79,12 +79,16 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SlowAPIMiddleware)
 
-    try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    if settings.ENABLE_OTEL:
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-        FastAPIInstrumentor.instrument_app(app)
-    except Exception:
-        logger.warning("OpenTelemetry instrumentation unavailable", exc_info=True)
+            FastAPIInstrumentor.instrument_app(app)
+            logger.info("OpenTelemetry instrumentation enabled")
+        except Exception:
+            logger.warning("OpenTelemetry instrumentation unavailable", exc_info=True)
+    else:
+        logger.info("OpenTelemetry instrumentation disabled")
 
     from app.api.routes import router
 
