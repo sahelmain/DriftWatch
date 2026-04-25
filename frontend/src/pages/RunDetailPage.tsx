@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -284,15 +284,13 @@ export default function RunDetailPage() {
   const [fetchError, setFetchError] = useState<BannerState | null>(null);
   const currentStatus = run?.status;
 
-  const loadRun = useEffectEvent(async (options?: { manual?: boolean }) => {
+  const loadRun = useCallback(async (options?: { manual?: boolean }) => {
     if (!id) {
       return;
     }
 
     if (options?.manual) {
       setRefreshing(true);
-    } else if (!run) {
-      setLoading(true);
     }
 
     try {
@@ -305,16 +303,14 @@ export default function RunDetailPage() {
         title: "Unable to load run",
         message: getApiErrorMessage(error, "The run details could not be loaded."),
       });
-      if (!run) {
-        setRun(null);
-      }
+      setRun((currentRun) => currentRun);
     } finally {
       setLoading(false);
       if (options?.manual) {
         setRefreshing(false);
       }
     }
-  });
+  }, [id]);
 
   useEffect(() => {
     setRun(null);

@@ -21,7 +21,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { setAuth } = useAuth();
+  const { logout, setAuth } = useAuth();
+  const isLogout = new URLSearchParams(location.search).get("logout") === "1";
   const state = location.state as
     | { from?: { pathname?: string; search?: string } }
     | null;
@@ -30,6 +31,16 @@ export default function LoginPage() {
     : APP_ROUTES.root;
 
   useEffect(() => {
+    if (isLogout) {
+      localStorage.removeItem("dw_token");
+      localStorage.removeItem("dw_user");
+      sessionStorage.setItem("dw_auto_login_started", "1");
+      sessionStorage.setItem(AUTO_LOGIN_KEY, "1");
+      logout();
+      navigate(PUBLIC_ROUTES.login, { replace: true });
+      return;
+    }
+
     if (localStorage.getItem("dw_token")) {
       navigate(returnPath, { replace: true });
       return;
@@ -86,7 +97,7 @@ export default function LoginPage() {
     }
 
     void runAutoLogin();
-  }, [navigate, returnPath, setAuth]);
+  }, [isLogout, logout, navigate, returnPath, setAuth]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

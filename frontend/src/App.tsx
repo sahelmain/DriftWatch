@@ -7,7 +7,7 @@ import {
   useLocation,
   useParams,
 } from "react-router-dom";
-import { AuthProvider, useAuth } from "./AuthContext";
+import { AuthProvider, useAuth } from "@/AuthContext";
 import Layout from "./components/Layout";
 import { APP_ROUTES, PUBLIC_ROUTES } from "./lib/routes";
 

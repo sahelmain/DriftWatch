@@ -554,13 +554,9 @@ export default function SuitesPage() {
                 : null;
 
               return (
-                <button
+                <article
                   key={suite.id}
-                  type="button"
-                  onClick={() =>
-                    navigate(`${APP_ROUTES.timeline}?suite=${suite.id}`)
-                  }
-                  className="w-full rounded-[22px] border border-surface-700/80 bg-surface-950/35 p-5 text-left transition-all duration-150 hover:border-surface-600 hover:bg-surface-900/60"
+                  className="w-full rounded-[22px] border border-surface-700/80 bg-surface-950/35 p-5 transition-all duration-150 hover:border-surface-600 hover:bg-surface-900/60"
                 >
                   <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                     <div className="min-w-0 space-y-4">
@@ -644,10 +640,7 @@ export default function SuitesPage() {
                       </div>
                     </div>
 
-                    <div
-                      className="flex shrink-0 flex-wrap items-center gap-2"
-                      onClick={(event) => event.stopPropagation()}
-                    >
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                       <button
                         onClick={() => handleRun(suite.id)}
                         disabled={runningSuiteId === suite.id}
@@ -690,7 +683,7 @@ export default function SuitesPage() {
                       </button>
                     </div>
                   </div>
-                </button>
+                </article>
               );
             })}
           </div>
