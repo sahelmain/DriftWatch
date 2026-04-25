@@ -30,6 +30,8 @@ const tabs = [
   { id: "billing", label: "Billing", icon: CreditCard },
   { id: "audit", label: "Audit Log", icon: FileText },
 ];
+const PUBLIC_DEMO_SESSION_ENABLED =
+  import.meta.env.VITE_ENABLE_PUBLIC_DEMO_SESSION === "true";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
@@ -77,6 +79,7 @@ export default function SettingsPage() {
 
   async function handleSaveGeneral(e: React.FormEvent) {
     e.preventDefault();
+    if (PUBLIC_DEMO_SESSION_ENABLED) return;
     setSaving(true);
     try {
       const updated = await updateSettings({
@@ -92,6 +95,7 @@ export default function SettingsPage() {
 
   async function handleCreateKey(e: React.FormEvent) {
     e.preventDefault();
+    if (PUBLIC_DEMO_SESSION_ENABLED) return;
     setCreatingKey(true);
     try {
       const res = await createApiKey(newKeyName);
@@ -107,6 +111,7 @@ export default function SettingsPage() {
   }
 
   async function handleRevokeKey(id: string) {
+    if (PUBLIC_DEMO_SESSION_ENABLED) return;
     if (!confirm("Revoke this API key? This cannot be undone.")) return;
     try {
       await revokeApiKey(id);
@@ -125,6 +130,7 @@ export default function SettingsPage() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
+    if (PUBLIC_DEMO_SESSION_ENABLED) return;
     setInviting(true);
     try {
       await inviteMember(inviteEmail, inviteRole);
@@ -161,6 +167,12 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {PUBLIC_DEMO_SESSION_ENABLED && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Public demo mode keeps organization, member, and API key settings read-only.
+        </div>
+      )}
+
       <div className="flex gap-6">
         <nav className="w-48 shrink-0 space-y-1">
           {tabs.map((tab) => (
@@ -195,6 +207,7 @@ export default function SettingsPage() {
                     className="input"
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
+                    disabled={PUBLIC_DEMO_SESSION_ENABLED}
                     required
                   />
                 </div>
@@ -206,12 +219,13 @@ export default function SettingsPage() {
                     className="input"
                     value={orgSlug}
                     onChange={(e) => setOrgSlug(e.target.value)}
+                    disabled={PUBLIC_DEMO_SESSION_ENABLED}
                     required
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || PUBLIC_DEMO_SESSION_ENABLED}
                   className="btn-primary flex items-center gap-2"
                 >
                   {saving && <Loader2 size={16} className="animate-spin" />}
@@ -240,12 +254,13 @@ export default function SettingsPage() {
                       value={newKeyName}
                       onChange={(e) => setNewKeyName(e.target.value)}
                       placeholder="Production CI"
+                      disabled={PUBLIC_DEMO_SESSION_ENABLED}
                       required
                     />
                   </div>
                   <button
                     type="submit"
-                    disabled={creatingKey}
+                    disabled={creatingKey || PUBLIC_DEMO_SESSION_ENABLED}
                     className="btn-primary flex items-center gap-2"
                   >
                     {creatingKey ? (
@@ -325,6 +340,7 @@ export default function SettingsPage() {
                           <td className="table-cell text-right">
                             <button
                               onClick={() => handleRevokeKey(key.id)}
+                              disabled={PUBLIC_DEMO_SESSION_ENABLED}
                               className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
                             >
                               <Trash2 size={14} />
@@ -360,6 +376,7 @@ export default function SettingsPage() {
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
                       placeholder="colleague@company.com"
+                      disabled={PUBLIC_DEMO_SESSION_ENABLED}
                       required
                     />
                   </div>
@@ -371,6 +388,7 @@ export default function SettingsPage() {
                       className="select"
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
+                      disabled={PUBLIC_DEMO_SESSION_ENABLED}
                     >
                       <option value="viewer">Viewer</option>
                       <option value="member">Member</option>
@@ -379,7 +397,7 @@ export default function SettingsPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={inviting}
+                    disabled={inviting || PUBLIC_DEMO_SESSION_ENABLED}
                     className="btn-primary flex items-center gap-2"
                   >
                     {inviting ? (

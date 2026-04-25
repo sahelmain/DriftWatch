@@ -20,7 +20,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useAuth } from "@/AuthContext";
 import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
 import {
   formatPercent,
@@ -66,9 +65,6 @@ function MetricPill({ label, value }: { label: string; value: string }) {
 }
 
 export default function TruthfulQaResearchPage() {
-  const { token } = useAuth();
-  const ctaHref = token ? APP_ROUTES.root : PUBLIC_ROUTES.login;
-
   return (
     <div className="min-h-screen bg-surface-950 text-gray-100">
       <header className="border-b border-surface-800/80 bg-surface-950/85 backdrop-blur">
@@ -346,8 +342,8 @@ export default function TruthfulQaResearchPage() {
                   DriftWatch turns category-level evaluation into a workflow you can rerun after every model, prompt, or provider change.
                 </h2>
               </div>
-              <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
-                {token ? "Open DriftWatch" : "Sign in to build a suite"}
+              <Link to={APP_ROUTES.root} className="btn-primary inline-flex items-center gap-2">
+                Open DriftWatch
                 <ArrowRight size={15} />
               </Link>
             </div>

@@ -41,6 +41,8 @@ const metricOptions = [
   { value: "pass_rate", label: "Pass Rate" },
   { value: "total_tests", label: "Total Tests" },
 ];
+const PUBLIC_DEMO_SESSION_ENABLED =
+  import.meta.env.VITE_ENABLE_PUBLIC_DEMO_SESSION === "true";
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertConfig[]>([]);
@@ -148,6 +150,7 @@ export default function AlertsPage() {
   }
 
   async function handleTest(alert: AlertConfig) {
+    if (PUBLIC_DEMO_SESSION_ENABLED) return;
     setTesting(alert.id);
     try {
       await testWebhook({
@@ -243,9 +246,13 @@ export default function AlertsPage() {
                       <div className="flex items-center gap-1 justify-end">
                         <button
                           onClick={() => handleTest(alert)}
-                          disabled={testing === alert.id}
+                          disabled={testing === alert.id || PUBLIC_DEMO_SESSION_ENABLED}
                           className="p-2 rounded-lg hover:bg-surface-700 text-gray-400 hover:text-gray-200 transition-colors"
-                          title="Test webhook"
+                          title={
+                            PUBLIC_DEMO_SESSION_ENABLED
+                              ? "Webhook tests are disabled in the public demo"
+                              : "Test webhook"
+                          }
                         >
                           {testing === alert.id ? (
                             <Loader2 size={14} className="animate-spin" />

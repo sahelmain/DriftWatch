@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import {
   Routes,
   Route,
@@ -7,11 +7,11 @@ import {
   useLocation,
   useParams,
 } from "react-router-dom";
+import { startDemoSession } from "@/api";
 import { AuthProvider, useAuth } from "@/AuthContext";
 import Layout from "./components/Layout";
 import { APP_ROUTES, PUBLIC_ROUTES } from "./lib/routes";
 
-const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const SuitesPage = lazy(() => import("./pages/SuitesPage"));
 const SuiteEditorPage = lazy(() => import("./pages/SuiteEditorPage"));
@@ -21,15 +21,70 @@ const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const RunsPage = lazy(() => import("./pages/RunsPage"));
 const PoliciesPage = lazy(() => import("./pages/PoliciesPage"));
-const LandingPage = lazy(() => import("./pages/LandingPage"));
 const PublicDemoPage = lazy(() => import("./pages/PublicDemoPage"));
 const TruthfulQaResearchPage = lazy(() => import("./pages/TruthfulQaResearchPage"));
+const PUBLIC_DEMO_SESSION_ENABLED =
+  import.meta.env.VITE_ENABLE_PUBLIC_DEMO_SESSION === "true";
 
 function RequireAuth() {
-  const { token } = useAuth();
+  const { token, setAuth } = useAuth();
   const location = useLocation();
+  const [bootstrapError, setBootstrapError] = useState(false);
+  const demoBootstrapStarted = useRef(false);
+
+  useEffect(() => {
+    if (
+      token ||
+      !PUBLIC_DEMO_SESSION_ENABLED ||
+      bootstrapError ||
+      demoBootstrapStarted.current
+    ) {
+      return;
+    }
+
+    demoBootstrapStarted.current = true;
+    setBootstrapError(false);
+
+    startDemoSession()
+      .then((res) => {
+        if (res.user) {
+          setAuth(res.access_token, res.user);
+        }
+      })
+      .catch(() => {
+        demoBootstrapStarted.current = false;
+        setBootstrapError(true);
+      });
+  }, [bootstrapError, setAuth, token]);
 
   if (!token) {
+    if (PUBLIC_DEMO_SESSION_ENABLED) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-surface-950 px-6 text-center">
+          <div className="max-w-md rounded-2xl border border-surface-700 bg-surface-900 p-6">
+            <p className="text-xs uppercase tracking-[0.24em] text-drift-300">
+              DriftWatch
+            </p>
+            <h1 className="mt-3 text-2xl font-semibold text-white">
+              {bootstrapError ? "Demo is temporarily unavailable" : "Opening the demo app"}
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-gray-400">
+              {bootstrapError
+                ? "The public demo session could not be created. Refresh to try again."
+                : "Creating a managed demo session so you can explore without signing in."}
+            </p>
+            {bootstrapError && (
+              <button
+                className="btn-primary mt-5"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
     return <Navigate to={PUBLIC_ROUTES.login} state={{ from: location }} replace />;
   }
 
@@ -73,13 +128,13 @@ export default function App() {
     <AuthProvider>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path={PUBLIC_ROUTES.home} element={<LandingPage />} />
+          <Route path={PUBLIC_ROUTES.home} element={<Navigate to={APP_ROUTES.root} replace />} />
           <Route path={PUBLIC_ROUTES.demo} element={<PublicDemoPage />} />
           <Route
             path={PUBLIC_ROUTES.truthfulQaResearch}
             element={<TruthfulQaResearchPage />}
           />
-          <Route path={PUBLIC_ROUTES.login} element={<LoginPage />} />
+          <Route path={PUBLIC_ROUTES.login} element={<Navigate to={APP_ROUTES.root} replace />} />
 
           <Route path="/dashboard" element={<Navigate to={APP_ROUTES.root} replace />} />
           <Route path="/suites" element={<Navigate to={APP_ROUTES.suites} replace />} />

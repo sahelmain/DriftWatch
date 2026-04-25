@@ -97,6 +97,35 @@ class TestAuth:
         assert second.status_code == 201
         assert second.json()["user"]["email"] == "second-org@test.io"
 
+    async def test_demo_session_disabled_outside_demo_mode(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", False)
+
+        res = await client.post("/api/auth/demo")
+
+        assert res.status_code == 404
+        assert res.json()["detail"] == "Demo session disabled"
+
+    async def test_demo_session_reuses_managed_user(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        monkeypatch.setattr(settings, "DEMO_AUTH_EMAIL", "demo@test.io")
+        monkeypatch.setattr(settings, "DEMO_AUTH_ORG_NAME", "TTU")
+
+        first = await client.post("/api/auth/demo")
+        second = await client.post("/api/auth/demo")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["user"]["email"] == "demo@test.io"
+        assert second.json()["user"]["id"] == first.json()["user"]["id"]
+
     async def test_login_returns_token_and_user(self, auth_client: AsyncClient):
         res = await auth_client.post(
             "/api/auth/login",
@@ -109,6 +138,35 @@ class TestAuth:
         body = res.json()
         assert "access_token" in body
         assert body["user"]["email"] == "admin@test.io"
+
+    async def test_demo_mode_blocks_admin_side_effects(
+        self,
+        auth_client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_MODE", True)
+        current_settings = (await auth_client.get("/api/settings")).json()
+        current_settings["org"]["name"] = "Changed"
+        current_settings["org"]["slug"] = "changed"
+
+        settings_res = await auth_client.put(
+            "/api/settings",
+            json={"org": current_settings["org"]},
+        )
+        key_res = await auth_client.post("/api/settings/api-keys", json={"name": "CI"})
+        member_res = await auth_client.post(
+            "/api/settings/members",
+            json={"email": "member@test.io", "password": "testpass123", "role": "member"},
+        )
+        webhook_res = await auth_client.post(
+            "/api/webhooks/test",
+            json={"channel": "email", "destination": "team@test.io"},
+        )
+
+        assert settings_res.status_code == 403
+        assert key_res.status_code == 403
+        assert member_res.status_code == 403
+        assert webhook_res.status_code == 403
 
     async def test_login_invalid_creds(self, client: AsyncClient):
         res = await client.post(

@@ -22,6 +22,8 @@ app:
     ENABLE_INLINE_SCHEDULER: "false"
     ENABLE_INLINE_RUNS: "true"
     PUBLIC_DEMO_MODE: "true"
+    DEMO_AUTH_EMAIL: "public-demo@driftwatch.local"
+    DEMO_AUTH_ORG_NAME: "DriftWatch Public Demo"
     DEMO_ALLOWED_MODELS_JSON: '["gemini-2.5-flash-lite"]'
     DEMO_MAX_TESTS_PER_SUITE: "3"
     DEMO_MAX_RUNS_PER_USER_PER_DAY: "10"

@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL_PRICING_JSON: str = "{}"
     PUBLIC_DEMO_MODE: bool = False
+    DEMO_AUTH_EMAIL: str = "public-demo@driftwatch.local"
+    DEMO_AUTH_ORG_NAME: str = "DriftWatch Public Demo"
     DEMO_ALLOWED_MODELS_JSON: str = '["gemini-2.5-flash-lite"]'
     DEMO_MAX_TESTS_PER_SUITE: int = 3
     DEMO_MAX_RUNS_PER_USER_PER_DAY: int = 10

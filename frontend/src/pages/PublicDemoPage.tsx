@@ -21,7 +21,6 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import StatusBadge from "@/components/StatusBadge";
-import { useAuth } from "@/AuthContext";
 import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
 import {
   publicDemoHighlights,
@@ -37,9 +36,6 @@ const chartData = publicDemoTimeline.map((point) => ({
 }));
 
 export default function PublicDemoPage() {
-  const { token } = useAuth();
-  const ctaHref = token ? APP_ROUTES.root : PUBLIC_ROUTES.login;
-
   return (
     <div className="min-h-screen bg-surface-950 text-gray-100">
       <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
@@ -68,8 +64,8 @@ export default function PublicDemoPage() {
               From benchmark finding to production monitoring
               <BarChart3 size={15} />
             </Link>
-            <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
-              {token ? "Open the app" : "Sign in to build your own"}
+            <Link to={APP_ROUTES.root} className="btn-primary inline-flex items-center gap-2">
+              Open the app
               <ArrowRight size={15} />
             </Link>
           </div>
@@ -333,8 +329,8 @@ export default function PublicDemoPage() {
                 DriftWatch is not a chatbot. It is a full-stack product for testing and monitoring AI behavior.
               </p>
             </div>
-            <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
-              {token ? "Open app" : "Sign in to build your own"}
+            <Link to={APP_ROUTES.root} className="btn-primary inline-flex items-center gap-2">
+              Open app
               <ArrowRight size={15} />
             </Link>
           </div>

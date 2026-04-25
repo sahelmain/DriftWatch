@@ -14,6 +14,8 @@ import type {
 } from "./types";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const PUBLIC_DEMO_SESSION_ENABLED =
+  import.meta.env.VITE_ENABLE_PUBLIC_DEMO_SESSION === "true";
 
 class ApiError extends Error {
   constructor(
@@ -77,7 +79,7 @@ async function fetchApi<T>(
   if (res.status === 401) {
     localStorage.removeItem("dw_token");
     localStorage.removeItem("dw_user");
-    window.location.href = "/login";
+    window.location.href = PUBLIC_DEMO_SESSION_ENABLED ? "/app" : "/login";
     throw new ApiError(401, "Unauthorized");
   }
 
@@ -109,6 +111,12 @@ export function getSuiteValidationFromError(error: unknown): SuiteValidationResp
 }
 
 // Auth
+export async function startDemoSession(): Promise<AuthResponse> {
+  return fetchApi<AuthResponse>("/auth/demo", {
+    method: "POST",
+  });
+}
+
 export async function login(
   email: string,
   password: string,

@@ -101,6 +101,16 @@ def _stringify_json_value(value) -> str | None:
     return json.dumps(value)
 
 
+async def _unique_org_slug(db: AsyncSession, org_name: str) -> str:
+    base_slug = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
+    slug = base_slug
+    suffix = 2
+    while (await db.execute(select(Organization.id).where(Organization.slug == slug))).scalar_one_or_none():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+    return slug
+
+
 def _client_run_status(run: TestRun) -> str:
     if run.status == "completed":
         total = run.total_tests or 0
@@ -257,14 +267,7 @@ async def register(request: Request, body: RegisterRequest = Body(...), db: Asyn
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    base_slug = re.sub(r"[^a-z0-9]+", "-", body.org_name.lower()).strip("-") or "org"
-    slug = base_slug
-    suffix = 2
-    while (await db.execute(select(Organization.id).where(Organization.slug == slug))).scalar_one_or_none():
-        slug = f"{base_slug}-{suffix}"
-        suffix += 1
-
-    org = Organization(name=body.org_name, slug=slug)
+    org = Organization(name=body.org_name, slug=await _unique_org_slug(db, body.org_name))
     db.add(org)
     await db.flush()
 
@@ -280,6 +283,33 @@ async def register(request: Request, body: RegisterRequest = Body(...), db: Asyn
     token = create_access_token({"sub": str(user.id)})
     user_resp = UserResponse.model_validate(user)
     return Token(access_token=token, user=user_resp)
+
+
+@router.post("/auth/demo", response_model=Token)
+async def demo_session(db: AsyncSession = Depends(get_db)):
+    if not settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=404, detail="Demo session disabled")
+
+    user = (await db.execute(select(User).where(User.email == settings.DEMO_AUTH_EMAIL))).scalar_one_or_none()
+    if user is None:
+        org = Organization(
+            name=settings.DEMO_AUTH_ORG_NAME,
+            slug=await _unique_org_slug(db, settings.DEMO_AUTH_ORG_NAME),
+        )
+        db.add(org)
+        await db.flush()
+
+        user = User(
+            email=settings.DEMO_AUTH_EMAIL,
+            password_hash=hash_password("demo-session-disabled"),
+            role="admin",
+            org_id=org.id,
+        )
+        db.add(user)
+        await db.flush()
+
+    token = create_access_token({"sub": str(user.id)})
+    return Token(access_token=token, user=UserResponse.model_validate(user))
 
 
 @router.post("/auth/login", response_model=Token)
@@ -686,6 +716,8 @@ async def test_webhook(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=403, detail="Webhook tests are disabled in the public demo")
     svc = AlertService(db)
     dispatch_map = {
         "slack": lambda: svc.send_slack(body.destination, "DriftWatch test alert"),
@@ -993,6 +1025,8 @@ async def update_settings(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=403, detail="Organization settings are read-only in the public demo")
     org = (await db.execute(select(Organization).where(Organization.id == user.org_id))).scalar_one_or_none()
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1011,6 +1045,8 @@ async def settings_create_api_key(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=403, detail="API key creation is disabled in the public demo")
     api_key, raw_key = await create_api_key(db, user.org_id, body.name, body.scopes, body.expires_at)
     return ApiKeyCreated(
         id=api_key.id,
@@ -1031,6 +1067,8 @@ async def settings_revoke_api_key(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=403, detail="API key revocation is disabled in the public demo")
     from app.models import ApiKey as ApiKeyModel
 
     key = (
@@ -1047,6 +1085,8 @@ async def settings_add_member(
     user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.PUBLIC_DEMO_MODE:
+        raise HTTPException(status_code=403, detail="Member invites are disabled in the public demo")
     member = User(
         email=body.email,
         password_hash=hash_password(body.password),

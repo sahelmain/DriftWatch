@@ -6,12 +6,10 @@ import {
   Bell,
   ShieldCheck,
   Settings,
-  LogOut,
   Activity,
 } from "lucide-react";
 import clsx from "clsx";
-import { useAuth } from "@/AuthContext";
-import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
+import { APP_ROUTES } from "@/lib/routes";
 
 const navItems = [
   { to: APP_ROUTES.root, icon: LayoutDashboard, label: "Dashboard" },
@@ -25,15 +23,6 @@ const navItems = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { logout } = useAuth();
-
-  function handleLogout() {
-    localStorage.removeItem("dw_token");
-    localStorage.removeItem("dw_user");
-    sessionStorage.setItem("dw_auto_login_started", "1");
-    sessionStorage.setItem("dw_demo_auto_login_started_v2", "1");
-    logout();
-  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-950">
@@ -76,15 +65,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="px-3 py-4 border-t border-surface-700">
-          <Link
-            to={`${PUBLIC_ROUTES.login}?logout=1`}
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-200 hover:bg-surface-800 transition-colors w-full"
-          >
-            <LogOut size={18} className="text-gray-500" />
-            Sign Out
-          </Link>
+        <div className="border-t border-surface-700 px-6 py-4 text-xs leading-5 text-gray-500">
+          Public demo session
         </div>
       </aside>
 

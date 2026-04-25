@@ -18,7 +18,6 @@ import {
   YAxis,
 } from "recharts";
 import { format } from "date-fns";
-import { useAuth } from "@/AuthContext";
 import { APP_ROUTES, PUBLIC_ROUTES } from "@/lib/routes";
 import {
   publicDemoHighlights,
@@ -50,9 +49,6 @@ const whyItMatters = [
 ];
 
 export default function LandingPage() {
-  const { token } = useAuth();
-  const ctaHref = token ? APP_ROUTES.root : PUBLIC_ROUTES.login;
-
   return (
     <div className="min-h-screen bg-surface-950 text-gray-100">
       <div className="absolute inset-x-0 top-0 h-[38rem] bg-[radial-gradient(circle_at_top_left,_rgba(59,110,255,0.18),_transparent_38%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_28%)] pointer-events-none" />
@@ -75,8 +71,8 @@ export default function LandingPage() {
             <Link to={PUBLIC_ROUTES.demo} className="btn-secondary hidden sm:inline-flex">
               View Demo
             </Link>
-            <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
-              {token ? "Open App" : "Sign In"}
+            <Link to={APP_ROUTES.root} className="btn-primary inline-flex items-center gap-2">
+              Open App
               <ArrowRight size={15} />
             </Link>
           </div>
@@ -110,8 +106,8 @@ export default function LandingPage() {
                 View Live Demo
                 <ArrowRight size={15} />
               </Link>
-              <Link to={ctaHref} className="btn-secondary inline-flex items-center gap-2 px-5 py-3">
-                {token ? "Open the App" : "Create Your Own Suite"}
+              <Link to={APP_ROUTES.root} className="btn-secondary inline-flex items-center gap-2 px-5 py-3">
+                Open the App
               </Link>
               <Link
                 to={PUBLIC_ROUTES.truthfulQaResearch}
@@ -337,8 +333,8 @@ export default function LandingPage() {
                       Explore the demo
                       <ArrowRight size={15} />
                     </Link>
-                    <Link to={ctaHref} className="btn-secondary">
-                      {token ? "Open app" : "Sign in"}
+                    <Link to={APP_ROUTES.root} className="btn-secondary">
+                      Open app
                     </Link>
                   </div>
                 </div>
