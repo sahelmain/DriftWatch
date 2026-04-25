@@ -3,7 +3,9 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   Clock3,
+  ExternalLink,
   Zap,
 } from "lucide-react";
 import {
@@ -58,10 +60,19 @@ export default function PublicDemoPage() {
               DriftWatch grades AI outputs and tracks quality change across runs.
             </p>
           </div>
-          <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
-            {token ? "Open the app" : "Sign in to build your own"}
-            <ArrowRight size={15} />
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to={PUBLIC_ROUTES.truthfulQaResearch}
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              From benchmark finding to production monitoring
+              <BarChart3 size={15} />
+            </Link>
+            <Link to={ctaHref} className="btn-primary inline-flex items-center gap-2">
+              {token ? "Open the app" : "Sign in to build your own"}
+              <ArrowRight size={15} />
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -341,6 +352,40 @@ export default function PublicDemoPage() {
                 {item}
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="mt-8 rounded-xl border border-amber-500/25 bg-amber-500/10 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div>
+              <div className="inline-flex items-center gap-2 text-sm font-medium text-amber-200">
+                <BarChart3 size={18} />
+                From benchmark finding to production monitoring
+              </div>
+              <h2 className="mt-3 max-w-3xl text-xl font-semibold text-white">
+                The TruthfulQA study shows that model failures cluster by category.
+                This demo shows how DriftWatch turns that lesson into repeatable
+                pass/fail checks, stored outputs, and drift tracking.
+              </h2>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to={PUBLIC_ROUTES.truthfulQaResearch}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                View research map
+                <ArrowRight size={15} />
+              </Link>
+              <a
+                href="https://github.com/sahelmain/llm-hallucination-phoenix"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-secondary inline-flex items-center gap-2"
+              >
+                Paper repo
+                <ExternalLink size={15} />
+              </a>
+            </div>
           </div>
         </div>
       </div>

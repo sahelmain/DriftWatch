@@ -257,7 +257,13 @@ async def register(request: Request, body: RegisterRequest = Body(...), db: Asyn
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    slug = re.sub(r"[^a-z0-9]+", "-", body.org_name.lower()).strip("-") or "org"
+    base_slug = re.sub(r"[^a-z0-9]+", "-", body.org_name.lower()).strip("-") or "org"
+    slug = base_slug
+    suffix = 2
+    while (await db.execute(select(Organization.id).where(Organization.slug == slug))).scalar_one_or_none():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+
     org = Organization(name=body.org_name, slug=slug)
     db.add(org)
     await db.flush()

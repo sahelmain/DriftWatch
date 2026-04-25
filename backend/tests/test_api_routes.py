@@ -75,6 +75,28 @@ class TestAuth:
         assert body["user"]["email"] == "new@test.io"
         assert body["user"]["role"] == "admin"
 
+    async def test_register_allows_duplicate_org_name(self, client: AsyncClient):
+        first = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "first-org@test.io",
+                "password": "pass1234",
+                "org_name": "TTU",
+            },
+        )
+        second = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "second-org@test.io",
+                "password": "pass1234",
+                "org_name": "ttu",
+            },
+        )
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert second.json()["user"]["email"] == "second-org@test.io"
+
     async def test_login_returns_token_and_user(self, auth_client: AsyncClient):
         res = await auth_client.post(
             "/api/auth/login",

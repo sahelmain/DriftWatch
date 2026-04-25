@@ -14,5 +14,6 @@ export const APP_ROUTES = {
 export const PUBLIC_ROUTES = {
   home: "/",
   demo: "/demo",
+  truthfulQaResearch: "/research/truthfulqa",
   login: "/login",
 } as const;

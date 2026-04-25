@@ -23,6 +23,7 @@ const RunsPage = lazy(() => import("./pages/RunsPage"));
 const PoliciesPage = lazy(() => import("./pages/PoliciesPage"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const PublicDemoPage = lazy(() => import("./pages/PublicDemoPage"));
+const TruthfulQaResearchPage = lazy(() => import("./pages/TruthfulQaResearchPage"));
 
 function RequireAuth() {
   const { token } = useAuth();
@@ -74,6 +75,10 @@ export default function App() {
         <Routes>
           <Route path={PUBLIC_ROUTES.home} element={<LandingPage />} />
           <Route path={PUBLIC_ROUTES.demo} element={<PublicDemoPage />} />
+          <Route
+            path={PUBLIC_ROUTES.truthfulQaResearch}
+            element={<TruthfulQaResearchPage />}
+          />
           <Route path={PUBLIC_ROUTES.login} element={<LoginPage />} />
 
           <Route path="/dashboard" element={<Navigate to={APP_ROUTES.root} replace />} />

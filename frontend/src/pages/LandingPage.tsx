@@ -6,6 +6,8 @@ import {
   TimerReset,
   CheckCircle2,
   AlertTriangle,
+  BarChart3,
+  ExternalLink,
 } from "lucide-react";
 import {
   Line,
@@ -111,6 +113,13 @@ export default function LandingPage() {
               <Link to={ctaHref} className="btn-secondary inline-flex items-center gap-2 px-5 py-3">
                 {token ? "Open the App" : "Create Your Own Suite"}
               </Link>
+              <Link
+                to={PUBLIC_ROUTES.truthfulQaResearch}
+                className="btn-secondary inline-flex items-center gap-2 px-5 py-3"
+              >
+                Research-backed LLM risk map
+                <BarChart3 size={15} />
+              </Link>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
@@ -203,6 +212,48 @@ export default function LandingPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-6">
+            <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+              <div>
+                <div className="inline-flex items-center gap-2 text-sm font-medium text-amber-200">
+                  <BarChart3 size={18} />
+                  Research-backed LLM risk map
+                </div>
+                <h2 className="mt-3 text-2xl font-semibold text-white">
+                  DriftWatch is connected to a real TruthfulQA study.
+                </h2>
+              </div>
+              <div className="space-y-4">
+                <p className="text-sm leading-7 text-gray-300">
+                  The study evaluated 19,608 local-model generations and found that
+                  hallucination risk clusters by question category, prompt template,
+                  and model choice. The public research page turns that finding into
+                  a product story for continuous AI quality monitoring.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    to={PUBLIC_ROUTES.truthfulQaResearch}
+                    className="btn-primary inline-flex items-center gap-2"
+                  >
+                    View the research map
+                    <ArrowRight size={15} />
+                  </Link>
+                  <a
+                    href="https://github.com/sahelmain/llm-hallucination-phoenix"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-secondary inline-flex items-center gap-2"
+                  >
+                    GitHub paper repo
+                    <ExternalLink size={15} />
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </section>
