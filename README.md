@@ -1,75 +1,49 @@
 # DriftWatch
 
-Continuous LLM evaluation and drift monitoring platform that detects quality regressions before they reach production.
+Evaluate model responses, store test results, and compare results across runs.
 
-[![CI](https://github.com/YOUR_ORG/driftwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/driftwatch/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/driftwatch.svg)](https://pypi.org/project/driftwatch/)
+[![CI](https://github.com/sahelmain/DriftWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/sahelmain/DriftWatch/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Features
 
-- **Scheduled & on-demand evaluations** — run test suites on any LLM provider (OpenAI, Anthropic, Google, local models)
-- **Drift detection** — statistical comparison across evaluation runs with configurable sensitivity
-- **Multi-metric scoring** — accuracy, latency, cost, toxicity, faithfulness, and custom metrics
-- **Alerting** — Slack, PagerDuty, and webhook notifications when drift exceeds thresholds
-- **Dashboard** — real-time visualization of model performance over time
-- **Python SDK & CLI** — define test suites in YAML/code, integrate into CI/CD
-- **REST API** — trigger evaluations, query results, and manage configurations programmatically
-- **Observability** — Prometheus metrics and Grafana dashboards out of the box
+- **Evaluations** — define test suites in YAML and run them locally or through the website
+- **Results** — check assertions and store pass rates, response times, token counts, and configured cost estimates
+- **History** — view website run timelines or compare saved JSON results with the local drift command
+- **Alerts** — send threshold alerts through configured Slack, email, PagerDuty, or Jira channels
+- **Dashboard** — manage suites and inspect run results
+- **REST API** — manage resources with JWT login, API keys, role checks, and organization access checks
+- **Scheduling** — use the in-process scheduler or the external cron entry point described in the architecture guide
+- **Monitoring** — use the Prometheus endpoint and the supplied monitoring configuration
 
 ## Architecture
 
+The CLI runs locally. The website uses the API and database. Web evaluations can run in the API process or in a Celery worker.
+
 ```mermaid
-graph TB
-    subgraph Client
-        CLI[CLI / SDK]
-        Dashboard[Vercel Frontend]
-    end
-
-    subgraph DemoBackend
-        API[Koyeb API]
-        DB[(Koyeb PostgreSQL)]
-    end
-
-    subgraph FullStackBackend
-        RenderAPI[Render Web API]
-        Workers[Render Worker]
-        Scheduler[Render Cron]
-        Redis[(Redis)]
-    end
-
-    subgraph Observability
-        Prom[Prometheus]
-        Graf[Grafana]
-    end
-
-    subgraph External
-        LLM[Gemini / Other Providers]
-        Notify[Slack / PagerDuty]
-    end
-
-    CLI -->|HTTP| API
-    Dashboard -->|VITE_API_URL| API
-    API --> DB
-    RenderAPI --> DB
-    RenderAPI --> Redis
-    Redis --> Workers
-    Scheduler --> Redis
-    Workers --> DB
-    Workers --> LLM
-    Workers --> Notify
-    API --> LLM
-    API --> Prom
-    RenderAPI --> Prom
-    Prom --> Graf
+flowchart TB
+    CLI["Python CLI"] --> Local["Local evaluation engine"]
+    Local --> Providers["Model provider APIs"]
+    UI["React dashboard"] --> API["FastAPI"]
+    API --> DB[("SQLAlchemy / PostgreSQL or SQLite")]
+    API -->|"Inline mode"| Exec["Shared run executor"]
+    API -->|"Worker mode"| Queue[("Redis")]
+    Queue --> Worker["Celery worker"]
+    Worker --> Exec
+    Exec --> Providers
+    Exec --> DB
 ```
+
+See the [architecture diagrams and code guide](docs/architecture.md) for the login flow, database model, migrations, tests, and current limits.
 
 ## Quick Start
 
-### Install the CLI/SDK
+### Install the CLI from this repository
 
 ```bash
-pip install driftwatch
+git clone https://github.com/sahelmain/DriftWatch.git
+cd DriftWatch
+pip install -e .
 ```
 
 ### Define a test suite
@@ -105,20 +79,22 @@ tests:
 
 ### Run an evaluation
 
+Set `GEMINI_API_KEY` for the example above, then run:
+
 ```bash
-driftwatch run --config driftwatch.yml
+driftwatch run driftwatch.yml
 ```
 
 ### Docker Compose (full stack)
 
+From the repository root:
+
 ```bash
-git clone https://github.com/YOUR_ORG/driftwatch.git
-cd driftwatch
 # Create a root .env only if you want to override Docker Compose defaults.
 docker compose up -d
 ```
 
-The dashboard is at `http://localhost:3000`, the API at `http://localhost:8000/api/docs`.
+The dashboard is at `http://localhost:3000`, the API at `http://localhost:8000/docs`.
 
 ## Web Evaluator Support
 
@@ -142,9 +118,9 @@ The current web executor supports these assertion types:
 - YAML remains the source of truth, but the editor validates drafts live, ships supported starter templates, and blocks unsupported web-runtime assertions before save.
 - The top-level YAML `name` field is optional in the web editor. The suite name shown in the app comes from the separate Name field.
 
-## Production Deployment
+## Deployment options
 
-DriftWatch supports two deployment shapes.
+The repository includes configurations for a demo and a worker-based setup. These files describe setup options; they do not confirm a live deployment.
 
 ### Public Demo (Gemini + Koyeb + Vercel)
 
@@ -158,7 +134,7 @@ DriftWatch supports two deployment shapes.
 - Default starter templates use `gemini-2.5-flash-lite` and omit `cost` assertions.
 - Demo guardrails limit allowed models, suite size, and run volume so the free Gemini quota lasts longer.
 
-### Paid Full Stack (Render)
+### Worker-based setup (Render)
 
 - Deploy [render.yaml](render.yaml) from the `main` branch when you need Celery workers, Redis, and scheduled runs.
 - Keep the Docker build context at the repo root (`.`) and the Dockerfile path at `backend/Dockerfile`.
@@ -168,7 +144,7 @@ DriftWatch supports two deployment shapes.
 - Set `LLM_MODEL_PRICING_JSON` if you want `cost` assertions and persisted cost estimates.
 - The API service runs an Alembic migration step before deploy; production schema changes should go through Alembic, not startup auto-creation.
 
-### Production Verification
+### Deployment checks
 
 1. Confirm the GitHub CI workflow is green before merging to `main`.
 2. For the public demo path, verify `GET https://<your-koyeb-host>/api/health` returns JSON and the database check is `ok`.
@@ -177,59 +153,49 @@ DriftWatch supports two deployment shapes.
 5. Create or edit a suite from the guided editor and confirm unsupported assertions or disallowed models are blocked before save.
 6. Trigger a manual run with `POST /api/suites/{suite_id}/run` and confirm it returns a `pending` run immediately.
 7. Open `/runs/{run_id}` or the dashboard and confirm the page auto-refreshes until the run completes with Gemini output.
-8. For the paid Render path only: confirm the migration step succeeds and scheduled suites produce a single run on the next cron tick.
+8. For the Render path, check the migration result and the external scheduler behavior. The current cron entry point queues every active scheduled suite on each call; it does not check each suite's cron expression. See [scheduled runs](docs/architecture.md#scheduled-runs).
 
 ## Tech Stack
 
 | Layer         | Technology                       |
 |---------------|----------------------------------|
-| CLI / SDK     | Python 3.12, Click, httpx        |
+| CLI / library | Python, Typer, provider clients   |
 | API           | FastAPI, SQLAlchemy, Pydantic    |
 | Workers       | Celery, Redis                    |
-| Database      | PostgreSQL 16                    |
+| Database      | PostgreSQL; SQLite for local use and tests |
 | Frontend      | React 19, TypeScript, Vite       |
 | Observability | Prometheus, Grafana              |
 | Infra         | Docker Compose, Vercel, Koyeb, Render |
 
 ## Project Structure
 
-```
-driftwatch/
-├── driftwatch/              # Python CLI/SDK package
-│   ├── __init__.py
-│   ├── cli.py
-│   ├── client.py
-│   ├── config.py
-│   └── models.py
-├── backend/                 # FastAPI application
+```text
+DriftWatch/
+├── driftwatch/              # Local CLI and evaluation library
+│   ├── cli/main.py
+│   ├── core/                # Suite loading and provider clients
+│   ├── eval/                # Assertions, evaluation, and statistics
+│   └── policy/
+├── backend/
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── api/
-│   │   ├── models/
-│   │   ├── services/
-│   │   └── ...
+│   │   ├── api/routes.py
+│   │   ├── models.py
+│   │   └── services/
+│   ├── alembic/             # Database migrations
+│   ├── tests/               # API and executor tests
 │   ├── worker/
 │   ├── Dockerfile
 │   └── requirements.txt
-├── frontend/                # React TypeScript dashboard
-│   ├── src/
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   └── package.json
-├── infra/                   # Optional self-hosted infra and observability assets
-│   ├── terraform/
-│   ├── k8s/
-│   ├── prometheus/
-│   └── grafana/
-├── tests/                   # Test suites
-├── docs/                    # Documentation
-├── .github/workflows/       # CI/CD pipelines
+├── frontend/                # React dashboard
+├── infra/                   # Infrastructure and monitoring templates
+├── tests/                   # Local library tests
+├── docs/
+├── .github/workflows/
 ├── docker-compose.yml
 ├── koyeb.yaml
-├── render.free.yaml
 ├── render.yaml
-├── frontend/vercel.json
-└── README.md
+└── pyproject.toml
 ```
 
 ## Development Setup
@@ -259,10 +225,12 @@ npm install
 npm run dev
 ```
 
-### SDK
+### CLI and library development
+
+From the repository root:
 
 ```bash
-pip install -e "./driftwatch[dev]"
+pip install -e ".[dev]"
 ```
 
 ### Run everything with Docker
@@ -275,8 +243,8 @@ docker compose up -d
 
 When the API is running, interactive documentation is available at:
 
-- **Swagger UI**: `http://localhost:8000/api/docs`
-- **ReDoc**: `http://localhost:8000/api/redoc`
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
 
 ### Key endpoints
 
@@ -320,13 +288,11 @@ All configuration is via environment variables. See [backend/.env.example](backe
 
 ## Contributing
 
-## Contributing
-
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/my-feature`
 3. Make your changes and add tests
 4. Run linting: `ruff check .` and `ruff format .`
-5. Run tests: `pytest tests/ -v`
+5. Run tests: `pytest tests/ backend/tests/ -v`
 6. Commit with a descriptive message: `git commit -m "feat: add new metric type"`
 7. Push and open a pull request
 
