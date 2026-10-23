@@ -1,392 +1,283 @@
-# DriftWatch Architecture
+# DriftWatch architecture and code guide
 
-## System Overview
+This guide describes the code in this repository. The deployment files are configuration examples; they do not confirm which services are running on a live server.
 
-DriftWatch is a platform for continuous LLM evaluation and drift monitoring. It combines a Python CLI/SDK, a FastAPI backend with Celery workers, a React dashboard, and a PostgreSQL + Redis data layer.
+## System overview
+
+DriftWatch has two execution paths. The Python CLI runs evaluations locally and calls model providers directly. The React website sends requests to the FastAPI backend, which stores suites and results through SQLAlchemy.
 
 ```mermaid
-graph TB
-    subgraph Clients["Client Layer"]
-        CLI["CLI / SDK<br/>Python package"]
-        Dashboard["Dashboard<br/>React + TypeScript"]
+flowchart TB
+    subgraph Local["Local evaluation"]
+        CLI["Typer CLI"] --> Engine["EvaluationEngine"]
+        Engine --> Output["Terminal or JSON results"]
     end
 
-    subgraph API_Layer["API Layer"]
-        API["FastAPI<br/>REST API"]
-        Auth["Auth Middleware<br/>JWT + API Keys"]
+    subgraph Web["Website and backend"]
+        UI["React 19 dashboard"] -->|"HTTP /api requests"| API["FastAPI"]
+        API --> DB[("SQLAlchemy database")]
+        API -->|"Inline mode"| Executor["Shared run executor"]
+        API -->|"Worker mode"| Redis[("Redis broker")]
+        Redis --> Worker["Celery worker"]
+        Worker --> Executor
+        Executor --> DB
+        Executor --> Alerts["Configured alert channels"]
     end
 
-    subgraph Worker_Layer["Worker Layer"]
-        Workers["Celery Workers<br/>Evaluation execution"]
-        Scheduler["Beat Scheduler<br/>Cron-based triggers"]
-        DriftEngine["Drift Engine<br/>Statistical analysis"]
-    end
-
-    subgraph Data_Layer["Data Layer"]
-        DB[("PostgreSQL 16<br/>Primary datastore")]
-        Redis[("Redis 7<br/>Broker + cache")]
-    end
-
-    subgraph Observability["Observability"]
-        Prom["Prometheus"]
-        Grafana["Grafana"]
-        Logs["CloudWatch Logs"]
-    end
-
-    subgraph External["External Services"]
-        OpenAI["OpenAI API"]
-        Anthropic["Anthropic API"]
-        Google["Google AI"]
-        Slack["Slack"]
-        PagerDuty["PagerDuty"]
-    end
-
-    CLI -->|HTTPS| API
-    Dashboard -->|HTTPS| API
-    API --> Auth
-    Auth --> API
-    API --> DB
-    API --> Redis
-    Scheduler -->|Enqueue| Redis
-    Redis -->|Dequeue| Workers
-    Workers --> DriftEngine
-    Workers --> DB
-    Workers --> OpenAI
-    Workers --> Anthropic
-    Workers --> Google
-    Workers --> Slack
-    Workers --> PagerDuty
-    API -.->|/metrics| Prom
-    Prom --> Grafana
-    API -.-> Logs
-    Workers -.-> Logs
+    Engine --> Providers["Model provider APIs"]
+    Executor --> Providers
 ```
 
-## Component Descriptions
+The shared executor is a Python function, not a separate service. With `ENABLE_INLINE_RUNS=true`, a FastAPI background task calls it in the API process. With `ENABLE_INLINE_RUNS=false`, a Celery worker calls it. Redis provides the Celery broker and result backend.
 
-### CLI / SDK (`driftwatch/`)
+PostgreSQL is configured in the deployment files. Local development defaults to SQLite, and API tests use an in-memory SQLite database.
 
-The Python package published to PyPI. Provides:
+| Component | Source | Purpose |
+| --- | --- | --- |
+| CLI | [cli/main.py](../driftwatch/cli/main.py) | Load a YAML suite, run it locally, and print results |
+| Local evaluation library | [eval/engine.py](../driftwatch/eval/engine.py) | Call providers and check assertions |
+| API | [api/routes.py](../backend/app/api/routes.py) | Handle users, suites, runs, alerts, policies, and datasets |
+| Authentication | [services/auth.py](../backend/app/services/auth.py) | Check access tokens, API keys, and required roles |
+| Database | [database.py](../backend/app/database.py), [models.py](../backend/app/models.py) | Manage async sessions and database models |
+| Web run executor | [services/run_executor.py](../backend/app/services/run_executor.py) | Run saved suites and store results |
+| Worker | [worker/runner.py](../backend/worker/runner.py) | Receive queued runs and call the shared executor |
+| Dashboard | [frontend/src](../frontend/src) | Show suites, runs, results, and settings |
 
-- **CLI** (`driftwatch run`, `driftwatch suites list`, etc.) for terminal-based workflows
-- **Python client** (`driftwatch.Client`) for programmatic access
-- **Configuration parser** for YAML test suite definitions
-- Communicates with the backend over HTTP
-
-### FastAPI API (`backend/app/`)
-
-The central REST API handling all client requests:
-
-- **Authentication** via JWT tokens (dashboard) and API keys (CLI/SDK)
-- **Evaluation management** — CRUD operations on test suites and evaluation runs
-- **Drift analysis** — query drift reports and threshold violations
-- **Prometheus metrics** endpoint at `/api/metrics`
-- **WebSocket** support for live evaluation progress
-
-### Celery Workers (`backend/worker/`)
-
-Background task processors responsible for:
-
-- Executing evaluation test cases against LLM providers
-- Running drift detection algorithms (KS-test, Mann-Whitney U, custom)
-- Sending alert notifications when thresholds are breached
-- Processing scheduled evaluation batches
-
-### Beat Scheduler
-
-Celery Beat process that triggers evaluations based on cron schedules defined in test suites.
-
-### React Dashboard (`frontend/`)
-
-Single-page application built with React 18, TypeScript, and Vite:
-
-- Real-time evaluation monitoring
-- Historical metric visualization (charts, heatmaps)
-- Test suite management interface
-- Drift detection alerts and timeline
-- Configuration and settings management
-
-### PostgreSQL Database
-
-Primary datastore holding:
-
-- Test suite definitions and configurations
-- Evaluation run results and individual test case outcomes
-- Metric time-series data
-- User accounts and API keys
-- Alert history
-
-### Redis
-
-Serves two roles:
-
-- **Message broker** for Celery task queue
-- **Cache layer** for API response caching and rate limiting
-
-## Data Flow Diagrams
-
-### Test Execution Flow
+## Website evaluation flow
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant CLI as CLI / Dashboard
+    participant UI as Dashboard
     participant API as FastAPI
-    participant Redis
-    participant Worker as Celery Worker
-    participant LLM as LLM Provider
-    participant DB as PostgreSQL
+    participant DB as Database
+    participant Queue as Redis
+    participant Worker as Celery worker
+    participant Exec as Run executor
+    participant LLM as Model provider
 
-    User->>CLI: driftwatch run --config suite.yml
-    CLI->>API: POST /api/evaluations
-    API->>DB: Create evaluation run record
-    API->>Redis: Enqueue evaluation tasks
-    API-->>CLI: 202 Accepted (run_id)
-
-    loop For each test case
-        Redis->>Worker: Dequeue task
-        Worker->>LLM: Send prompt
-        LLM-->>Worker: Response
-        Worker->>Worker: Score metrics
-        Worker->>DB: Store results
+    User->>UI: Start a saved suite
+    UI->>API: POST /api/suites/{suite_id}/run
+    API->>API: Check user, organization, and run limits
+    API->>DB: Create and commit pending test_run
+    alt Inline mode
+        API-->>UI: 201 Created with run data
+        API->>Exec: Execute as a background task
+    else Worker mode
+        API->>Queue: Queue the run ID
+        API-->>UI: 201 Created with run data
+        Queue->>Worker: Deliver task
+        Worker->>Exec: Execute the run
     end
-
-    Worker->>DB: Finalize run (aggregate scores)
-    CLI->>API: GET /api/evaluations/{run_id}
-    API->>DB: Fetch results
-    API-->>CLI: Evaluation results
+    Exec->>DB: Load suite and mark run as running
+    loop Each test in the suite
+        Exec->>LLM: Send prompt
+        LLM-->>Exec: Return response
+        Exec->>Exec: Check supported assertions
+    end
+    Exec->>DB: Store results, assertions, and pass rate
+    Exec->>Exec: Check configured alert thresholds
+    Exec->>DB: Commit results and alert events
+    UI->>API: GET /api/runs/{run_id}
+    API->>DB: Read run within the user's organization
+    API-->>UI: Return status and results
 ```
 
-### Drift Detection Flow
+The run detail page [polls every two seconds](../frontend/src/pages/RunDetailPage.tsx) while a run is pending or running. It uses HTTP requests.
+
+The web executor checks text, length, regular expression, JSON schema, latency, and cost assertions. The supported list is in [suite_validation.py](../backend/app/services/suite_validation.py). Cost estimates need a configured model price.
+
+### Drift and alerts
+
+The web backend records completed-run pass rates in `drift_scores`. The drift endpoint builds its timeline from completed runs. See [RunService](../backend/app/services/runs.py) and [the API routes](../backend/app/api/routes.py).
+
+The local `driftwatch drift` command compares the current evaluation with saved JSON results. Its [statistics module](../driftwatch/eval/statistics.py) contains distribution, trend, and pass-rate calculations. This local path is separate from the website's stored pass-rate timeline.
+
+[AlertService](../backend/app/services/alerts.py) checks enabled rules for the run's organization and suite. It sends an alert when `pass_rate` or `total_tests` falls below the configured threshold. Supported channels are Slack, email, PagerDuty, and Jira. It records whether each send succeeded or failed.
+
+### Scheduled runs
+
+- [scheduler.py](../backend/app/scheduler.py) uses APScheduler and each suite's `schedule_cron` expression when `ENABLE_INLINE_SCHEDULER=true`.
+- [scheduler_cron.py](../backend/app/scheduler_cron.py) is an external entry point. Each call queues all active suites that have a schedule value. It currently does not check whether each suite's cron expression is due.
+- [render.yaml](../render.yaml) calls that external entry point every five minutes. Its behavior therefore differs from the in-process scheduler.
+- Docker Compose includes a Celery Beat process, but the worker code does not define a Beat schedule for suites.
+
+## Authentication and authorization
+
+### Password login
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as Beat Scheduler
-    participant Redis
-    participant Worker as Celery Worker
-    participant DB as PostgreSQL
-    participant Notify as Slack / PagerDuty
+    actor User
+    participant UI as Dashboard
+    participant API as FastAPI
+    participant DB as Database
 
-    Scheduler->>Redis: Trigger scheduled evaluation
-    Redis->>Worker: Dequeue evaluation tasks
-    Worker->>DB: Fetch baseline metrics
-    Worker->>Worker: Execute test suite
-    Worker->>Worker: Statistical comparison (KS-test)
-    Worker->>DB: Store drift analysis
-
-    alt Drift exceeds threshold
-        Worker->>Notify: Send alert
-        Worker->>DB: Record alert event
-    end
+    User->>UI: Enter email and password
+    UI->>API: POST /api/auth/login
+    API->>DB: Load user and password_hash
+    API->>API: Check bcrypt hash and active status
+    API-->>UI: Return JWT access token and user
+    UI->>API: Authorization: Bearer access_token
+    API->>API: Check JWT signature and expiry
+    API->>DB: Load active user from token subject
+    API->>API: Apply route role and organization checks
+    API-->>UI: Return permitted data
 ```
 
-### Alert Flow
+Passwords are stored as bcrypt hashes. The login endpoint returns an HS256 JWT access token. Its default lifetime is 60 minutes, set by `ACCESS_TOKEN_EXPIRE_MINUTES`. The current implementation has no refresh-token flow.
 
-```mermaid
-sequenceDiagram
-    participant Worker as Celery Worker
-    participant DB as PostgreSQL
-    participant Slack
-    participant PD as PagerDuty
-    participant WH as Webhooks
+### API keys
 
-    Worker->>Worker: Detect threshold violation
-    Worker->>DB: Create alert record
+API requests can also use `Authorization: Bearer dw_...`. [auth.py](../backend/app/services/auth.py) hashes the supplied key with SHA-256, finds the stored hash, checks expiry, and updates the last-use time.
 
-    par Notify all channels
-        Worker->>Slack: Post drift alert
-        Worker->>PD: Create incident
-        Worker->>WH: POST to configured URLs
-    end
-```
+Keys belong to an organization. The current implementation resolves a valid key to an admin user in that organization. The `scopes` field is stored, but it is not enforced by the authentication function. API keys therefore do not provide separate per-scope access controls.
 
-## Database Schema Overview
+### Access checks
+
+[require_role](../backend/app/services/auth.py) is a FastAPI dependency. Routes use `require_role("admin")` for operations such as member management and API-key changes. Other routes require an authenticated user and check the user's organization when they read or change a resource.
+
+This is a set of route-specific checks. The code does not enforce a complete read-only permission set for the `viewer` role across all routes.
+
+When `PUBLIC_DEMO_MODE=true`, `/api/auth/demo` returns access to a shared demo user and organization. This is a shared demo session, not a separate account for each visitor. The API applies demo restrictions and run limits.
+
+## Database model
+
+[models.py](../backend/app/models.py) defines 14 tables. The diagram shows the main tables and selected columns. The remaining tables are listed below it. IDs use SQLAlchemy's `Uuid` type; JSON fields use its `JSON` type.
 
 ```mermaid
 erDiagram
+    organizations {
+        uuid id PK
+        string name
+        string slug UK
+    }
     users {
         uuid id PK
+        uuid org_id FK
         string email UK
-        string hashed_password
+        string password_hash
         string role
-        timestamp created_at
+        boolean is_active
     }
     api_keys {
         uuid id PK
-        uuid user_id FK
-        string key_hash UK
-        string name
-        timestamp expires_at
+        uuid org_id FK
+        string key_hash
+        string key_prefix
+        json scopes
     }
     test_suites {
         uuid id PK
-        uuid user_id FK
+        uuid org_id FK
         string name
-        jsonb config
-        string schedule
-        timestamp created_at
+        text yaml_content
+        string schedule_cron
     }
-    evaluation_runs {
+    test_runs {
         uuid id PK
         uuid suite_id FK
+        uuid org_id FK
         string status
-        jsonb aggregate_metrics
-        timestamp started_at
-        timestamp completed_at
+        float pass_rate
+        integer total_tests
+        integer passed_tests
     }
     test_results {
         uuid id PK
         uuid run_id FK
-        integer case_index
-        jsonb input
+        string test_name
+        text prompt
+        string model
         text output
-        jsonb metrics
-        float latency_ms
+        boolean passed
     }
-    drift_reports {
+    assertion_results {
         uuid id PK
-        uuid suite_id FK
-        uuid baseline_run_id FK
-        uuid comparison_run_id FK
-        jsonb drift_metrics
-        boolean threshold_breached
-        timestamp created_at
-    }
-    alerts {
-        uuid id PK
-        uuid drift_report_id FK
-        string channel
-        string status
-        timestamp sent_at
+        uuid result_id FK
+        string assertion_type
+        boolean passed
+        json expected
+        json actual
     }
 
-    users ||--o{ api_keys : "has"
-    users ||--o{ test_suites : "owns"
-    test_suites ||--o{ evaluation_runs : "produces"
-    evaluation_runs ||--o{ test_results : "contains"
-    test_suites ||--o{ drift_reports : "analyzed in"
-    drift_reports ||--o{ alerts : "triggers"
+    organizations ||--o{ users : has
+    organizations ||--o{ api_keys : has
+    organizations ||--o{ test_suites : owns
+    organizations ||--o{ test_runs : owns
+    test_suites ||--o{ test_runs : produces
+    test_runs ||--o{ test_results : contains
+    test_results ||--o{ assertion_results : contains
 ```
 
-## API Design Principles
+| Other table | Stored data | Foreign keys |
+| --- | --- | --- |
+| `drift_scores` | Metric name, value, and time | `suite_id`, `run_id` |
+| `alert_configs` | Channel, destination, threshold, and enabled state | `org_id`, optional `suite_id` |
+| `alert_events` | Alert message and send status | `alert_config_id`, `run_id` |
+| `audit_logs` | User action, resource, details, and time | `org_id`, `user_id` |
+| `policies` | Metric, operator, threshold, and action | `org_id`, optional `suite_id` |
+| `datasets` | Dataset content, version, and row count | `org_id` |
+| `prompt_versions` | Suite YAML versions and change notes | `suite_id`, `created_by` |
 
-- **RESTful** — resources are nouns, HTTP verbs for actions
-- **Versioned** — all endpoints under `/api/` (future: `/api/v2/`)
-- **Pagination** — cursor-based pagination for list endpoints
-- **Consistent errors** — RFC 7807 problem detail format
-- **Async** — all database I/O is async (SQLAlchemy + asyncpg)
-- **Idempotent** — safe retries with idempotency keys for POST operations
-- **Rate limited** — token bucket per API key, stored in Redis
+## Migrations
 
-## Security Architecture
+The repository has one Alembic revision: [001_initial.py](../backend/alembic/versions/001_initial.py). Its `upgrade()` creates the 14 tables and their indexes. It creates parent tables before tables with foreign keys to them. Its `downgrade()` drops the tables in reverse order and removes their data.
 
-### Authentication Flow
+[alembic/env.py](../backend/alembic/env.py) imports the models and uses `Base.metadata` for schema comparison. It reads `DATABASE_URL` and creates an async engine. Set an async database URL, such as `postgresql+asyncpg://...`, before running a migration.
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Client
-    participant API
-    participant DB
+From a development checkout with the backend dependencies installed:
 
-    alt Dashboard Login
-        User->>Client: Enter credentials
-        Client->>API: POST /api/auth/login
-        API->>DB: Verify credentials
-        API-->>Client: JWT access + refresh tokens
-        Client->>API: Requests with Authorization: Bearer <jwt>
-    end
-
-    alt SDK / CLI
-        User->>Client: Configure API key
-        Client->>API: Requests with X-API-Key header
-        API->>DB: Verify key hash + permissions
-    end
+```bash
+cd backend
+alembic upgrade head
 ```
 
-### Security Layers
+This command applies pending revisions to the selected database. It does not create a database server.
 
-- **Transport** — TLS everywhere (enforced at ingress/load balancer)
-- **Authentication** — JWT (dashboard) + API keys (SDK/CI)
-- **Authorization** — Role-based access control (admin, member, viewer)
-- **Input validation** — Pydantic models for all request bodies
-- **SQL injection** — parameterized queries via SQLAlchemy ORM
-- **Rate limiting** — per-key limits stored in Redis
-- **Secrets** — Kubernetes Secrets / AWS Secrets Manager, never in code
+`AUTO_CREATE_SCHEMA=true` makes API startup call `Base.metadata.create_all()`. That can create missing tables, but it does not apply Alembic revisions or update existing columns. The Render configuration disables this option and runs Alembic before API deployment.
 
-## Deployment Architecture
+## Tests and code walkthrough
 
-### Local Development (Docker Compose)
+Start with these files when reviewing the backend:
 
-All services run locally via `docker compose up`. Suitable for development and small-scale self-hosting.
+| Area | Read this code | What to follow |
+| --- | --- | --- |
+| Login and roles | [auth.py](../backend/app/services/auth.py), [routes.py](../backend/app/api/routes.py) | Password check, access token, current user, and `require_role` dependency |
+| Organization access | [test_api_routes.py](../backend/tests/test_api_routes.py) | `test_suite_run_and_ci_access_are_scoped_to_user_org` and `test_alert_policy_dataset_and_event_access_are_scoped_to_user_org` |
+| Models and migration | [models.py](../backend/app/models.py), [001_initial.py](../backend/alembic/versions/001_initial.py) | Table fields, foreign keys, creation order, and rollback order |
+| Run execution | [run_executor.py](../backend/app/services/run_executor.py), [test_run_executor.py](../backend/tests/test_run_executor.py) | Saved results, failed provider calls, supported assertions, and run limits |
+| Test database | [conftest.py](../backend/tests/conftest.py) | In-memory SQLite and the overridden database dependency |
 
-```mermaid
-graph LR
-    subgraph Docker Compose
-        FE[Frontend :3000]
-        API[API :8000]
-        W[Workers]
-        S[Scheduler]
-        DB[(Postgres :5432)]
-        R[(Redis :6379)]
-        P[Prometheus :9090]
-        G[Grafana :3001]
-    end
-    FE --> API
-    API --> DB
-    API --> R
-    R --> W
-    S --> R
-    W --> DB
-    API -.-> P
-    P --> G
+The API tests use Pytest, pytest-asyncio, and HTTPX's in-process ASGI transport. They cover registration, login, suite operations, organization access, and demo restrictions. Executor tests replace provider calls with test doubles.
+
+The API fixtures create and drop tables with SQLAlchemy metadata. These tests do not run Alembic or prove that migrations work against PostgreSQL. They also do not establish complete permission coverage for every role and route.
+
+After installing `.[dev]` and `backend/requirements.txt`, run the existing suites from the repository root:
+
+```bash
+pytest tests/ backend/tests/ -v
 ```
 
-### AWS Production (Terraform)
+The [CI workflow](../.github/workflows/ci.yml) runs Python lint checks and tests, frontend lint and build checks, and a Docker Compose build. Check the workflow results for the commit you are reviewing.
 
-EC2 instance running Docker Compose, backed by managed RDS and ElastiCache. CloudWatch for logging and alerting.
+## API details
 
-```mermaid
-graph TB
-    subgraph VPC
-        subgraph Public Subnet
-            EC2[EC2 t3.medium<br/>Docker Compose]
-        end
-        subgraph Private Subnet
-            RDS[(RDS PostgreSQL<br/>db.t3.micro)]
-            ElastiCache[(ElastiCache Redis<br/>cache.t3.micro)]
-        end
-    end
-    S3[(S3 Backups)]
-    CW[CloudWatch]
+- Application routes use the `/api` prefix.
+- FastAPI's interactive docs are at `/docs` and `/redoc`.
+- Paginated list routes use `page` and `limit`, with database offsets.
+- Route errors use FastAPI's JSON `detail` field.
+- The run trigger returns `201 Created` with the pending run.
+- [rate_limit.py](../backend/app/rate_limit.py) configures SlowAPI; Redis is not configured there as a rate-limit store.
 
-    EC2 --> RDS
-    EC2 --> ElastiCache
-    EC2 --> S3
-    EC2 -.-> CW
-```
+## Deployment files
 
-### Kubernetes (Production-scale)
+| File | Configured services and behavior |
+| --- | --- |
+| [koyeb.yaml](../koyeb.yaml) | Demo API and PostgreSQL; evaluations run in the API process; no worker or cron service |
+| [render.yaml](../render.yaml) | API, Celery worker, Redis, PostgreSQL, and external cron entry point; API migrations run before deployment |
+| [docker-compose.yml](../docker-compose.yml) | Local API, worker, Beat process, PostgreSQL, Redis, frontend, Prometheus, and Grafana |
+| [frontend/vercel.json](../frontend/vercel.json) | Frontend deployment; `VITE_API_URL` selects the backend |
+| [infra](../infra) | Additional infrastructure and monitoring templates |
 
-For larger deployments, Kubernetes manifests provide auto-scaling, rolling updates, and high availability.
-
-```mermaid
-graph TB
-    subgraph K8s Cluster
-        Ingress[Nginx Ingress]
-        subgraph driftwatch namespace
-            FE[Frontend Pods x2]
-            API[API Pods 2-10<br/>HPA]
-            W[Worker Pods x2]
-        end
-    end
-    ExtDB[(External RDS)]
-    ExtRedis[(External ElastiCache)]
-
-    Ingress -->|/| FE
-    Ingress -->|/api| API
-    API --> ExtDB
-    API --> ExtRedis
-    W --> ExtDB
-    W --> ExtRedis
-```
+Use [the README](../README.md) for setup options. A configured service or passing local test is not proof of a successful live deployment.
